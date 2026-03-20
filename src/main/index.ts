@@ -403,6 +403,11 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
   log(`IPC LIST_SESSIONS ${projectPath ? `(path=${projectPath})` : ''}`)
   try {
     const cwd = projectPath || process.cwd()
+    // Validate projectPath — reject null bytes, newlines, non-absolute paths
+    if (/[\0\r\n]/.test(cwd) || !cwd.startsWith('/')) {
+      log(`LIST_SESSIONS: rejected invalid projectPath: ${cwd}`)
+      return []
+    }
     // Claude stores project sessions at ~/.claude/projects/<encoded-path>/
     // Path encoding: replace all '/' with '-' (leading '/' becomes leading '-')
     const encodedPath = cwd.replace(/\//g, '-')
@@ -493,8 +498,21 @@ ipcMain.handle(IPC.LOAD_SESSION, async (_e, arg: { sessionId: string; projectPat
   const sessionId = typeof arg === 'string' ? arg : arg.sessionId
   const projectPath = typeof arg === 'string' ? undefined : arg.projectPath
   log(`IPC LOAD_SESSION ${sessionId}${projectPath ? ` (path=${projectPath})` : ''}`)
+
+  // Validate sessionId — must be strict UUID to prevent path traversal via crafted filenames
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!UUID_RE.test(sessionId)) {
+    log(`LOAD_SESSION: rejected invalid sessionId: ${sessionId}`)
+    return []
+  }
+
   try {
     const cwd = projectPath || process.cwd()
+    // Validate projectPath — reject null bytes, newlines, non-absolute paths
+    if (/[\0\r\n]/.test(cwd) || !cwd.startsWith('/')) {
+      log(`LOAD_SESSION: rejected invalid projectPath: ${cwd}`)
+      return []
+    }
     const encodedPath = cwd.replace(/\//g, '-')
     const filePath = join(homedir(), '.claude', 'projects', encodedPath, `${sessionId}.jsonl`)
     if (!existsSync(filePath)) return []
@@ -605,9 +623,11 @@ ipcMain.handle(IPC.SELECT_DIRECTORY, async () => {
 
 ipcMain.handle(IPC.OPEN_EXTERNAL, async (_event, url: string) => {
   try {
-    // Only allow http(s) links from markdown content.
-    if (!/^https?:\/\//i.test(url)) return false
-    await shell.openExternal(url)
+    // Parse with URL constructor to reject malformed/ambiguous payloads
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    if (!parsed.hostname) return false
+    await shell.openExternal(parsed.href)
     return true
   } catch {
     return false
@@ -766,16 +786,35 @@ ipcMain.handle(IPC.PASTE_IMAGE, async (_event, dataUrl: string) => {
 
 ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
   const { writeFileSync, existsSync, unlinkSync, readFileSync } = require('fs')
-  const { execSync } = require('child_process')
-  const { join } = require('path')
+  const { execFile } = require('child_process')
+  const { join, basename } = require('path')
   const { tmpdir } = require('os')
+
+  const startedAt = Date.now()
+  const phaseMs: Record<string, number> = {}
+  const mark = (name: string, t0: number) => { phaseMs[name] = Date.now() - t0 }
 
   const tmpWav = join(tmpdir(), `clui-voice-${Date.now()}.wav`)
   try {
+    const runExecFile = (bin: string, args: string[], timeout: number): Promise<string> =>
+      new Promise((resolve, reject) => {
+        execFile(bin, args, { encoding: 'utf-8', timeout }, (err: any, stdout: string, stderr: string) => {
+          if (err) {
+            const detail = stderr?.trim() || stdout?.trim() || err.message
+            reject(new Error(detail))
+            return
+          }
+          resolve(stdout || '')
+        })
+      })
+
+    let t0 = Date.now()
     const buf = Buffer.from(audioBase64, 'base64')
     writeFileSync(tmpWav, buf)
+    mark('decode+write_wav', t0)
 
-    // Find whisper-cli (whisper-cpp homebrew) or whisper (python)
+    // Find whisper-cli (whisper-cpp) or whisper (python)
+    t0 = Date.now()
     const candidates = [
       '/opt/homebrew/bin/whisper-cli',
       '/usr/local/bin/whisper-cli',
@@ -791,20 +830,19 @@ ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
     for (const c of candidates) {
       if (existsSync(c)) { whisperBin = c; break }
     }
+    mark('probe_binary_paths', t0)
 
     if (!whisperBin) {
+      t0 = Date.now()
       const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
       const whichCmd = process.platform === 'darwin' ? 'whence -p' : 'which'
-      try {
-        whisperBin = execSync(`${shell} -lc "${whichCmd} whisper-cli"`, { encoding: 'utf-8' }).trim()
-      } catch {}
-    }
-    if (!whisperBin) {
-      const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
-      const whichCmd = process.platform === 'darwin' ? 'whence -p' : 'which'
-      try {
-        whisperBin = execSync(`${shell} -lc "${whichCmd} whisper"`, { encoding: 'utf-8' }).trim()
-      } catch {}
+      for (const name of ['whisper-cli', 'whisper']) {
+        try {
+          whisperBin = await runExecFile(shell, ['-lc', `${whichCmd} ${name}`], 5000).then((s) => s.trim())
+          if (whisperBin) break
+        } catch {}
+      }
+      mark('probe_binary_whence', t0)
     }
 
     if (!whisperBin) {
@@ -851,26 +889,35 @@ ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
         }
       }
       const langFlag = isEnglishOnly ? '-l en' : '-l auto'
-      output = execSync(
-        `"${whisperBin}" -m "${modelPath}" -f "${tmpWav}" --no-timestamps ${langFlag}`,
-        { encoding: 'utf-8', timeout: 30000 }
+      t0 = Date.now()
+      output = await runExecFile(
+        whisperBin,
+        ['-m', modelPath, '-f', tmpWav, '--no-timestamps', '-l', isEnglishOnly ? 'en' : 'auto'],
+        30000
       )
+      mark('whisper_cpp_transcribe', t0)
     } else {
       // Python whisper: prefer larger models for better Chinese accuracy
-      const langFlag = isEnglishOnly ? '--language en' : ''
       // Use small model (good Chinese accuracy, reasonable CPU speed)
       // medium/large too slow without GPU acceleration
       const model = existsSync(join(homedir(), '.cache/whisper/small.pt')) ? 'small' : 'tiny'
+      const langArgs = isEnglishOnly ? ['--language', 'en'] : []
       log(`Python whisper using model: ${model}`)
-      output = execSync(
-        `"${whisperBin}" "${tmpWav}" --model ${model} ${langFlag} --output_format txt --output_dir "${tmpdir()}"`,
-        { encoding: 'utf-8', timeout: 60000 }
+      t0 = Date.now()
+      output = await runExecFile(
+        whisperBin,
+        [tmpWav, '--model', model, ...langArgs, '--output_format', 'txt', '--output_dir', tmpdir()],
+        60000
       )
+      mark('python_whisper_transcribe', t0)
       // Python whisper writes .txt file
       const txtPath = tmpWav.replace('.wav', '.txt')
       if (existsSync(txtPath)) {
+        t0 = Date.now()
         const transcript = readFileSync(txtPath, 'utf-8').trim()
+        mark('python_whisper_read_txt', t0)
         try { unlinkSync(txtPath) } catch {}
+        log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
         return { error: null, transcript }
       }
       // File not created — Python whisper failed silently
@@ -888,12 +935,15 @@ ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
       .trim()
 
     if (HALLUCINATIONS.test(transcript)) {
+      log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
       return { error: null, transcript: '' }
     }
 
+    log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
     return { error: null, transcript: transcript || '' }
   } catch (err: any) {
     log(`Transcription error: ${err.message}`)
+    log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt, failed: true })}`)
     return {
       error: `Transcription failed: ${err.message}`,
       transcript: null,
@@ -933,6 +983,8 @@ ipcMain.handle(IPC.OPEN_IN_TERMINAL, (_event, arg: string | null | { sessionId?:
   const { execFile } = require('child_process')
   const claudeBin = 'claude'
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   // Support both old (string) and new ({ sessionId, projectPath }) calling convention
   let sessionId: string | null = null
   let projectPath: string = process.cwd()
@@ -943,23 +995,41 @@ ipcMain.handle(IPC.OPEN_IN_TERMINAL, (_event, arg: string | null | { sessionId?:
     projectPath = arg.projectPath && arg.projectPath !== '~' ? arg.projectPath : process.cwd()
   }
 
+  // Validate sessionId — must be a strict UUID to prevent injection into the shell command
+  if (sessionId && !UUID_RE.test(sessionId)) {
+    log(`OPEN_IN_TERMINAL: rejected invalid sessionId: ${sessionId}`)
+    return false
+  }
+
+  // Sanitize projectPath — reject null bytes, newlines, and non-absolute paths
+  if (/[\0\r\n]/.test(projectPath) || !projectPath.startsWith('/')) {
+    log(`OPEN_IN_TERMINAL: rejected invalid projectPath: ${projectPath}`)
+    return false
+  }
+
+  // Shell-safe single-quote escaping: replace ' with '\'' (end quote, escaped literal quote, reopen quote)
+  // Single quotes block all shell expansion ($, `, \, etc.) — unlike double quotes which allow $() and backticks
+  const shellSingleQuote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'"
+
+  const safeDir = shellSingleQuote(projectPath)
+
   let cmd: string
   if (sessionId) {
-    cmd = `cd "${projectPath}" && ${claudeBin} --resume ${sessionId}`
+    // sessionId is UUID-validated above, safe to embed directly
+    cmd = `cd ${safeDir} && ${claudeBin} --resume ${sessionId}`
   } else {
-    cmd = `cd "${projectPath}" && ${claudeBin}`
+    cmd = `cd ${safeDir} && ${claudeBin}`
   }
 
   try {
     if (process.platform === 'darwin') {
-      const projectDir = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-      const macCmd = sessionId
-        ? `cd \\"${projectDir}\\" && ${claudeBin} --resume ${sessionId}`
-        : `cd \\"${projectDir}\\" && ${claudeBin}`
-      const script = `tell application "Terminal"\n  activate\n  do script "${macCmd}"\nend tell`
+      // AppleScript string escaping: backslashes doubled, double quotes escaped
+      const escapeAppleScript = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+      const appleCmd = escapeAppleScript(cmd)
+      const script = `tell application "Terminal"\n  activate\n  do script "${appleCmd}"\nend tell`
       execFile('/usr/bin/osascript', ['-e', script], (err: Error | null) => {
         if (err) log(`Failed to open terminal: ${err.message}`)
-        else log(`Opened terminal with: ${macCmd}`)
+        else log(`Opened terminal with: ${cmd}`)
       })
     } else {
       // Linux: try common terminal emulators with absolute paths
