@@ -720,6 +720,66 @@ function ToolGroup({ tools, skipMotion }: { tools: Message[]; skipMotion?: boole
                       {desc}
                     </span>
 
+                    {/* Tool detail content for Edit/Write */}
+                    {!isRunning && tool.toolInput && (() => {
+                      try {
+                        const parsed = JSON.parse(tool.toolInput)
+                        if (toolName === 'Edit' && (parsed.old_string || parsed.new_string)) {
+                          return (
+                            <div
+                              className="mt-1 text-[11px] leading-[1.5] rounded overflow-hidden"
+                              style={{ border: `1px solid ${colors.toolBorder}` }}
+                            >
+                              {parsed.old_string && (
+                                <pre
+                                  className="px-2 py-1 whitespace-pre-wrap break-all overflow-hidden"
+                                  style={{
+                                    background: 'rgba(248,81,73,0.1)',
+                                    color: colors.textSecondary,
+                                    maxHeight: 120,
+                                    margin: 0,
+                                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
+                                    fontSize: 10,
+                                  }}
+                                >{parsed.old_string.length > 300 ? parsed.old_string.slice(0, 297) + '...' : parsed.old_string}</pre>
+                              )}
+                              {parsed.new_string && (
+                                <pre
+                                  className="px-2 py-1 whitespace-pre-wrap break-all overflow-hidden"
+                                  style={{
+                                    background: 'rgba(63,185,80,0.1)',
+                                    color: colors.textSecondary,
+                                    maxHeight: 120,
+                                    margin: 0,
+                                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
+                                    fontSize: 10,
+                                  }}
+                                >{parsed.new_string.length > 300 ? parsed.new_string.slice(0, 297) + '...' : parsed.new_string}</pre>
+                              )}
+                            </div>
+                          )
+                        }
+                        if (toolName === 'Write' && parsed.content) {
+                          const snippet = parsed.content.length > 200 ? parsed.content.slice(0, 197) + '...' : parsed.content
+                          return (
+                            <pre
+                              className="mt-1 px-2 py-1 text-[10px] leading-[1.5] rounded whitespace-pre-wrap break-all overflow-hidden"
+                              style={{
+                                background: colors.surfaceHover,
+                                color: colors.textSecondary,
+                                maxHeight: 120,
+                                margin: 0,
+                                marginTop: 4,
+                                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
+                                border: `1px solid ${colors.toolBorder}`,
+                              }}
+                            >{snippet}</pre>
+                          )
+                        }
+                      } catch { /* partial JSON */ }
+                      return null
+                    })()}
+
                     {/* Result badge */}
                     {!isRunning && (
                       <span
