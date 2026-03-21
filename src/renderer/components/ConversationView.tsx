@@ -630,19 +630,20 @@ function toolSummary(tools: Message[]): string {
 
 /** Short human-readable description from tool name + already-parsed input */
 function getToolDescriptionFromParsed(name: string, parsed: Record<string, unknown>): string {
+  const s = (v: unknown) => (typeof v === 'string' ? v : '')
   switch (name) {
-    case 'Read': return `Read ${parsed.file_path || parsed.path || 'file'}`
-    case 'Edit': return `Edit ${parsed.file_path || 'file'}`
-    case 'Write': return `Write ${parsed.file_path || 'file'}`
-    case 'Glob': return `Search files: ${parsed.pattern || ''}`
-    case 'Grep': return `Search: ${parsed.pattern || ''}`
+    case 'Read': return `Read ${s(parsed.file_path) || s(parsed.path) || 'file'}`
+    case 'Edit': return `Edit ${s(parsed.file_path) || 'file'}`
+    case 'Write': return `Write ${s(parsed.file_path) || 'file'}`
+    case 'Glob': return `Search files: ${s(parsed.pattern)}`
+    case 'Grep': return `Search: ${s(parsed.pattern)}`
     case 'Bash': {
-      const cmd = String(parsed.command || '')
+      const cmd = s(parsed.command)
       return cmd.length > 60 ? `${cmd.substring(0, 57)}...` : cmd || 'Bash'
     }
-    case 'WebSearch': return `Search: ${parsed.query || parsed.search_query || ''}`
-    case 'WebFetch': return `Fetch: ${parsed.url || ''}`
-    case 'Agent': return `Agent: ${String(parsed.prompt || parsed.description || '').substring(0, 50)}`
+    case 'WebSearch': return `Search: ${s(parsed.query) || s(parsed.search_query)}`
+    case 'WebFetch': return `Fetch: ${s(parsed.url)}`
+    case 'Agent': return `Agent: ${(s(parsed.prompt) || s(parsed.description)).substring(0, 50)}`
     default: return name
   }
 }
@@ -746,7 +747,7 @@ function ToolGroup({ tools, skipMotion }: { tools: Message[]; skipMotion?: boole
                           >
                             {oldStr !== null && (
                               <pre
-                                className="px-2 py-1 whitespace-pre-wrap break-all overflow-hidden"
+                                className="px-2 py-1 whitespace-pre-wrap break-all overflow-y-auto"
                                 aria-label="Removed"
                                 style={{
                                   background: 'rgba(248,81,73,0.1)',
@@ -760,7 +761,7 @@ function ToolGroup({ tools, skipMotion }: { tools: Message[]; skipMotion?: boole
                             )}
                             {newStr !== null && (
                               <pre
-                                className="px-2 py-1 whitespace-pre-wrap break-all overflow-hidden"
+                                className="px-2 py-1 whitespace-pre-wrap break-all overflow-y-auto"
                                 aria-label="Added"
                                 style={{
                                   background: 'rgba(63,185,80,0.1)',
@@ -776,11 +777,11 @@ function ToolGroup({ tools, skipMotion }: { tools: Message[]; skipMotion?: boole
                         )
                       }
                       if (toolName === 'Write' && typeof parsedInput.content === 'string') {
-                        const content = parsedInput.content as string
+                        const content = parsedInput.content
                         const snippet = content.length > 200 ? content.slice(0, 197) + '...' : content
                         return (
                           <pre
-                            className="mt-1 px-2 py-1 text-[10px] leading-[1.5] rounded whitespace-pre-wrap break-all overflow-hidden"
+                            className="mt-1 px-2 py-1 text-[10px] leading-[1.5] rounded whitespace-pre-wrap break-all overflow-y-auto"
                             aria-label="File content"
                             style={{
                               background: colors.surfaceHover,
