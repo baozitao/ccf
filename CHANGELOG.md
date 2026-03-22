@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.3 (2026-03-22)
+
+### Fixed
+- Marketplace panel no longer truncated (moved outside content div)
+- Marketplace scrollbar matches app theme (removed scrollbarWidth override)
+- Category filter row supports wheel scroll and drag-to-scroll
+- Marketplace card list supports drag-to-scroll
+- Full Width mode dynamically adjusts window width
+- Observer only grows window height (never shrinks prematurely)
+- Collapse/marketplace close shrinks window after animation delay
+- Tab switch pre-resizes window for tabs with conversation content
+- Same session won't open duplicate tabs from history
+- Default tab title changed from "New Tab" to "Chat"
+- Tab hover shows full title tooltip
+- Tab, +, history, settings buttons all have hover effects
+- Tab strip supports horizontal wheel scroll for many tabs
+
+### Changed
+- Window width adapts: 660px (normal), 900px (full width)
+- Marketplace panel right-aligned, fits within window
+
 ## v0.1.2 (2026-03-22)
 
 ### Fixed

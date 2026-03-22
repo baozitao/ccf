@@ -106,7 +106,7 @@ function makeLocalTab(): TabState {
     permissionDenied: null,
     attachments: [],
     messages: [],
-    title: 'New Tab',
+    title: 'Chat',
     lastResult: null,
     sessionModel: null,
     sessionTools: [],
@@ -195,6 +195,11 @@ export const useSessionStore = create<State>((set, get) => ({
       // Already active — do nothing (double-click on empty area toggles expand)
       return
     }
+    // Pre-grow window if switching to a tab with messages while expanded
+    const targetTab = s.tabs.find(t => t.id === tabId)
+    if (s.isExpanded && targetTab && targetTab.messages.length > 0) {
+      window.clui.resizeHeight(600, true)
+    }
     // Switching to a different tab: mark as read
     set((prev) => ({
       activeTabId: tabId,
@@ -209,7 +214,7 @@ export const useSessionStore = create<State>((set, get) => ({
     const { activeTabId, isExpanded } = get()
     const willExpand = !isExpanded
     if (willExpand) {
-      await window.clui.resizeHeight(600)  // wait for window to grow
+      await window.clui.resizeHeight(600, true)  // wait for window to grow
     }
     set((s) => ({
       isExpanded: willExpand,
@@ -219,7 +224,8 @@ export const useSessionStore = create<State>((set, get) => ({
         : s.tabs,
     }))
     if (!willExpand) {
-      await window.clui.resizeHeight(150)  // shrink after collapse
+      // Delay shrink to after collapse animation completes
+      setTimeout(() => window.clui.resizeHeight(200), 350)
     }
   },
 
@@ -227,7 +233,9 @@ export const useSessionStore = create<State>((set, get) => ({
     const s = get()
     if (s.marketplaceOpen) {
       set({ marketplaceOpen: false })
+      setTimeout(() => window.clui.resizeHeight(200), 350)
     } else {
+      window.clui.resizeHeight(760, true)  // pre-grow height for marketplace
       set({ isExpanded: false, marketplaceOpen: true })
       get().loadMarketplace()
     }
@@ -381,7 +389,7 @@ export const useSessionStore = create<State>((set, get) => ({
         hasChosenDirectory: !!projectPath,
         messages,
       }
-      await window.clui.resizeHeight(600)  // grow window first
+      await window.clui.resizeHeight(600, true)  // grow window first
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,

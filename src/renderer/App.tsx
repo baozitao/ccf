@@ -109,6 +109,48 @@ export default function App() {
 
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
 
+  // Auto-resize window width for full-width/marketplace modes (Linux only)
+  useEffect(() => {
+    if (!navigator.platform.startsWith('Linux')) return
+    // normal: 190(circles) + 460(content) + 10 = 660
+    // full-width: 190 + 700 + 10 = 900
+    // marketplace: 920 (720px centered panel)
+    const targetW = expandedUI ? 900 : 660
+    // Only set width; let height be managed by pre-resize (grow) and observer (grow)
+    // Height shrink happens naturally when content shrinks
+    window.clui.resizeHeight(0, false, targetW)
+  }, [expandedUI, marketplaceOpen])
+
+  // Auto-resize window height to match content (Linux only)
+  useEffect(() => {
+    if (!navigator.platform.startsWith('Linux')) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let lastH = 0
+
+    const measure = () => {
+      const els = document.querySelectorAll('[data-clui-ui]')
+      let maxBottom = 0
+      els.forEach(el => {
+        const b = (el as HTMLElement).getBoundingClientRect().bottom
+        if (b > maxBottom) maxBottom = b
+      })
+      const h = Math.ceil(maxBottom)
+      if (h > 0 && h > lastH + 10) {
+        lastH = h
+        window.clui.resizeHeight(h + 20, true)  // growOnly: observer can only grow
+      }
+    }
+
+    const debounced = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(measure, 16)
+    }
+
+    setTimeout(measure, 300)
+    const obs = new MutationObserver(debounced)
+    obs.observe(document.body, { childList: true, subtree: true })
+    return () => { if (timer) clearTimeout(timer); obs.disconnect() }
+  }, [])
 
   // Layout dimensions — expandedUI widens and heightens the panel
   const contentWidth = expandedUI ? 700 : spacing.contentWidth
@@ -148,43 +190,43 @@ export default function App() {
         }}
       >
 
-        {/* ─── 460px content column, centered. Circles overflow left. ─── */}
-        <div style={{ width: Math.min(contentWidth, window.innerWidth - 190), position: 'relative', marginLeft: 'auto', marginRight: 0, transition: 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)' }}>
-
-          <AnimatePresence initial={false}>
-            {marketplaceOpen && (
-              <div
-                data-clui-ui
-                style={{
-                  width: 720,
-                  maxWidth: 720,
-                  marginLeft: '50%',
-                  transform: 'translateX(-50%)',
-                  marginBottom: 14,
-                  position: 'relative',
-                  zIndex: 30,
-                }}
+        {/* Marketplace panel — outside content div so it's not constrained by contentWidth */}
+        <AnimatePresence initial={false}>
+          {marketplaceOpen && (
+            <div
+              data-clui-ui
+              style={{
+                width: Math.min(660, window.innerWidth - 10),
+                marginLeft: 'auto',
+                marginRight: 0,
+                marginBottom: 14,
+                position: 'relative',
+                zIndex: 30,
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.985 }}
+                transition={TRANSITION}
               >
-                <motion.div
-                  initial={{ opacity: 0, y: 14, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.985 }}
-                  transition={TRANSITION}
+                <div
+                  data-clui-ui
+                  className="glass-surface overflow-hidden no-drag"
+                  style={{
+                    borderRadius: 24,
+                    maxHeight: 470,
+                  }}
                 >
-                  <div
-                    data-clui-ui
-                    className="glass-surface overflow-hidden no-drag"
-                    style={{
-                      borderRadius: 24,
-                      maxHeight: 470,
-                    }}
-                  >
-                    <MarketplacePanel />
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
+                  <MarketplacePanel />
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* ─── 460px content column ─── */}
+        <div style={{ width: contentWidth, position: 'relative', marginLeft: 'auto', marginRight: 0, transition: 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)' }}>
 
           {/*
             ─── Tabs / message shell ───

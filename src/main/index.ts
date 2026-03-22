@@ -31,7 +31,7 @@ const controlPlane = new ControlPlane(INTERACTIVE_PTY)
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
 const BAR_WIDTH = 650  // Tight: 180(circles) + 460(content) + 10(pad) = 650; setShape handles click-through
-const PILL_HEIGHT = 180  // Starts compact; resizeHeight grows/shrinks synchronously.
+const PILL_HEIGHT = 220  // Starts compact; resizeHeight grows/shrinks dynamically.
 const PILL_BOTTOM_MARGIN = 4
 
 // ─── Broadcast to renderer ───
@@ -206,14 +206,25 @@ function toggleWindow(source = 'unknown'): void {
 }
 
 // ─── Resize ───
-ipcMain.handle(IPC.RESIZE_HEIGHT, (_e, height: number) => {
+// growOnly=true: only increase height (for pre-resize before expand/popup)
+// growOnly=false: can also shrink (for MutationObserver auto-resize)
+ipcMain.handle(IPC.RESIZE_HEIGHT, (_e, height: number, growOnly?: boolean, width?: number) => {
   if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'linux') return
-  if (isDraggingWindow || !height || height <= 0) return
-  const newH = Math.max(150, Math.min(height + 30, 800))
+  if (isDraggingWindow) return
+  const newH = height > 0 ? Math.max(200, Math.min(height + 50, 800)) : 0
+  const newW = width ? Math.max(400, Math.min(width, 1200)) : 0
   const [x, y] = mainWindow.getPosition()
-  const [, oldH] = mainWindow.getSize()
-  if (Math.abs(newH - oldH) > 5) {
-    mainWindow.setBounds({ x, y, width: BAR_WIDTH, height: newH })
+  const [oldW, oldH] = mainWindow.getSize()
+  const finalH = newH > 0 ? newH : oldH
+  const finalW = newW > 0 ? newW : oldW
+  if (growOnly && finalH <= oldH && finalW <= oldW) return
+  const hChanged = newH > 0 && Math.abs(finalH - oldH) > 5
+  const wChanged = newW > 0 && Math.abs(finalW - oldW) > 5
+  if (hChanged || wChanged) {
+    const nw = wChanged ? finalW : oldW
+    const nh = hChanged ? finalH : oldH
+    log(`[resize] ${oldW}x${oldH} → ${nw}x${nh} (req h=${height} w=${width} grow=${growOnly})`)
+    mainWindow.setBounds({ x, y, width: nw, height: nh })
   }
 })
 

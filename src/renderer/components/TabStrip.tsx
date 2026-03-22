@@ -117,6 +117,9 @@ export function TabStrip() {
             maskImage: 'linear-gradient(to right, black 0%, black calc(100% - 40px), transparent 100%)',
             WebkitMaskImage: 'linear-gradient(to right, black 0%, black calc(100% - 40px), transparent 100%)',
           }}
+          onWheel={(e) => {
+            e.currentTarget.scrollLeft += e.deltaY
+          }}
         >
           <AnimatePresence mode="popLayout">
             {tabs.map((tab) => {
@@ -147,9 +150,16 @@ export function TabStrip() {
                     setDragTabId(null)
                   }}
                   onDragEnd={() => setDragTabId(null)}
+                  title={tab.title}
                   onClick={() => handleClick(tab.id)}
                   onDoubleClick={(e) => handleDoubleClick(e, tab.id, tab.title)}
                   className="group flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0 max-w-[160px] transition-all duration-150"
+                  onMouseEnter={(e) => {
+                    if (!isActive) (e.currentTarget as HTMLElement).style.background = colors.tabActive
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'
+                  }}
                   style={{
                     background: isActive ? colors.tabActive : 'transparent',
                     border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
@@ -177,7 +187,7 @@ export function TabStrip() {
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <span className="truncate flex-1" title={tab.title}>{tab.title}</span>
+                    <span className="truncate flex-1">{tab.title}</span>
                   )}
                   {tabs.length > 1 && (
                     <button
@@ -204,7 +214,9 @@ export function TabStrip() {
       <div className="flex items-center gap-0.5 flex-shrink-0 ml-1 pr-2">
         <button
           onClick={() => createTab()}
-          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors hover:opacity-100"
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary; (e.currentTarget as HTMLElement).style.background = colors.tabActive }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textTertiary; (e.currentTarget as HTMLElement).style.background = '' }}
           style={{ color: colors.textTertiary }}
           title="New tab"
         >

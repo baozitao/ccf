@@ -205,13 +205,37 @@ export function MarketplacePanel() {
       </div>
 
       {/* Filter chips */}
-      <div style={{
-        display: 'flex',
-        gap: 8,
-        padding: '0 18px 12px',
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          padding: '0 18px 12px',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+        }}
+        onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY }}
+        onMouseDown={(e) => {
+          if (e.button !== 0) return
+          const el = e.currentTarget
+          const startX = e.clientX
+          const scrollLeft = el.scrollLeft
+          let dragged = false
+          const onMove = (ev: MouseEvent) => {
+            dragged = true
+            el.scrollLeft = scrollLeft - (ev.clientX - startX)
+          }
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove)
+            document.removeEventListener('mouseup', onUp)
+            if (dragged) {
+              const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault() }
+              el.addEventListener('click', swallow, { capture: true, once: true })
+            }
+          }
+          document.addEventListener('mousemove', onMove)
+          document.addEventListener('mouseup', onUp)
+        }}
+      >
         {filters.map((f) => (
           <button
             key={f}
@@ -236,7 +260,32 @@ export function MarketplacePanel() {
       </div>
 
       {/* Body */}
-      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '0 18px', scrollbarWidth: 'thin' }}>
+      <div
+        ref={scrollContainerRef}
+        style={{ flex: 1, overflowY: 'auto', padding: '0 18px' }}
+        onMouseDown={(e) => {
+          if (e.button !== 0) return
+          const el = e.currentTarget
+          const startX = e.clientX, startY = e.clientY
+          const scrollLeft = el.scrollLeft, scrollTop = el.scrollTop
+          let dragged = false
+          const onMove = (ev: MouseEvent) => {
+            dragged = true
+            el.scrollLeft = scrollLeft - (ev.clientX - startX)
+            el.scrollTop = scrollTop - (ev.clientY - startY)
+          }
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove)
+            document.removeEventListener('mouseup', onUp)
+            if (dragged) {
+              const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault() }
+              el.addEventListener('click', swallow, { capture: true, once: true })
+            }
+          }
+          document.addEventListener('mousemove', onMove)
+          document.addEventListener('mouseup', onUp)
+        }}
+      >
         {loading ? (
           <LoadingState colors={colors} />
         ) : error ? (

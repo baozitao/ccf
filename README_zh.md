@@ -8,6 +8,10 @@
 
 <a href="README.md">🇺🇸 English</a> &nbsp;|&nbsp; 🇨🇳 中文
 
+<p align="center"><img src="docs/images/banner.svg" alt="CCF Banner" width="800"/></p>
+
+<p align="center">🚀 <strong>让 AI 助手浮在一切之上。</strong> Claude Code CLI 的桌面浮窗界面。 🎯</p>
+
 [![GitHub stars](https://img.shields.io/github/stars/baozitao/ccf?style=flat-square&logo=github&color=FFD700)](https://github.com/baozitao/ccf/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/baozitao/ccf?style=flat-square&logo=github)](https://github.com/baozitao/ccf/releases)

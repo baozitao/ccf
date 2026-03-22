@@ -122,6 +122,8 @@ export function SettingsPopover() {
         className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
         style={{ color: colors.textTertiary }}
         title="Settings"
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textTertiary }}
       >
         <DotsThree size={16} weight="bold" />
       </button>

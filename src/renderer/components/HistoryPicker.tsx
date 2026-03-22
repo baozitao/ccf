@@ -85,17 +85,24 @@ export function HistoryPicker() {
 
   const handleToggle = async () => {
     if (!open) {
-      await window.clui.resizeHeight(400)  // grow for popup
+      await window.clui.resizeHeight(400, true)  // pre-grow for popup
       updatePos()
       void loadSessions()
+      setOpen(true)
     } else {
-      void window.clui.resizeHeight(150)  // shrink after close
+      setOpen(false)
+      // MutationObserver auto-shrinks after popup DOM removed
     }
-    setOpen((o) => !o)
   }
 
   const handleSelect = (session: SessionMeta) => {
     setOpen(false)
+    // If session already open in a tab, switch to it instead of opening a new one
+    const existingTab = useSessionStore.getState().tabs.find(t => t.claudeSessionId === session.sessionId)
+    if (existingTab) {
+      useSessionStore.getState().selectTab(existingTab.id)
+      return
+    }
     const title = session.customName
       || (session.firstMessage
         ? (session.firstMessage.length > 30 ? session.firstMessage.substring(0, 27) + '...' : session.firstMessage)
@@ -144,6 +151,8 @@ export function HistoryPicker() {
         className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
         style={{ color: colors.textTertiary }}
         title="Resume a previous session"
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textTertiary }}
       >
         <Clock size={13} />
       </button>
