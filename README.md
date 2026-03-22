@@ -30,9 +30,19 @@ A floating desktop overlay UI for [Claude Code](https://docs.anthropic.com/en/do
 | Window shape | macOS native | Electron `setShape` API |
 | Voice/Whisper | `brew install whisper-cli` | `whisper` with `small` model |
 
-## Install
+## Prerequisites
 
-**Prerequisites:** Node.js 18+, Claude Code CLI (`npm install -g @anthropic-ai/claude-code`), `gnome-screenshot`, `gnome-terminal`, `whisper` (optional, for voice input).
+- [Node.js](https://nodejs.org/) >= 18
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated:
+  ```bash
+  npm install -g @anthropic-ai/claude-code
+  claude auth login
+  ```
+- GNOME desktop environment (Ubuntu 22.04+ recommended)
+- Optional: `gnome-screenshot` for screenshot feature
+- Optional: `whisper` for voice input (`pip install openai-whisper`)
+
+## Install
 
 ```bash
 git clone https://github.com/your-fork/clui-cc.git
@@ -128,9 +138,19 @@ CCF 是 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI 的浮
 | 窗口形状/穿透 | macOS 原生 | Electron `setShape` API |
 | 语音/Whisper | `brew install whisper-cli` | `whisper`（small 模型） |
 
-## 安装
+## 前置条件
 
-**前置条件：** Node.js 18+、Claude Code CLI（`npm install -g @anthropic-ai/claude-code`）、`gnome-screenshot`、`gnome-terminal`、`whisper`（可选，用于语音输入）。
+- [Node.js](https://nodejs.org/) >= 18
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并完成授权：
+  ```bash
+  npm install -g @anthropic-ai/claude-code
+  claude auth login
+  ```
+- GNOME 桌面环境（推荐 Ubuntu 22.04+）
+- 可选：`gnome-screenshot`（截图功能）
+- 可选：`whisper`（语音输入，`pip install openai-whisper`）
+
+## 安装
 
 ```bash
 git clone https://github.com/your-fork/clui-cc.git
