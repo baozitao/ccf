@@ -42,6 +42,8 @@ export interface CluiAPI {
   animateHeight(from: number, to: number, durationMs: number): Promise<void>
   hideWindow(): void
   dragWindow(dx: number, dy: number): void
+  dragStart(): void
+  dragEnd(): void
   clearShape(): void
   isVisible(): Promise<boolean>
   /** OS-level click-through for transparent window regions */
@@ -102,6 +104,8 @@ const api: CluiAPI = {
     ipcRenderer.invoke(IPC.ANIMATE_HEIGHT, { from, to, durationMs }),
   hideWindow: () => ipcRenderer.send(IPC.HIDE_WINDOW),
   dragWindow: (dx, dy) => ipcRenderer.send('clui:drag-window', dx, dy),
+  dragStart: () => ipcRenderer.send('clui:drag-start'),
+  dragEnd: () => ipcRenderer.send('clui:drag-end'),
   clearShape: () => ipcRenderer.send('clui:clear-shape'),
   isVisible: () => ipcRenderer.invoke(IPC.IS_VISIBLE),
   setIgnoreMouseEvents: (ignore, options) =>

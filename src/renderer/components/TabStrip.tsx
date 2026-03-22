@@ -99,11 +99,11 @@ export function TabStrip() {
       className="flex items-center no-drag"
       style={{ padding: '8px 0' }}
       onDoubleClick={(e) => {
-        // Double-click on empty area (not on tabs/buttons) toggles expand
+        // Double-click on empty area toggles expand
+        // Only skip if clicking directly on a tab or button
         const target = e.target as HTMLElement
-        if (!target.closest('button, [role="tab"], .group')) {
-          toggleExpanded()
-        }
+        if (target.closest('button, input')) return
+        toggleExpanded()
       }}
     >
       {/* Scrollable tabs area — clipped by master card edge */}

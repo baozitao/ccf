@@ -378,6 +378,9 @@ export const useSessionStore = create<State>((set, get) => ({
         hasChosenDirectory: !!projectPath,
         messages,
       }
+      window.clui.resizeHeight(600)
+      // Wait for window to resize before expanding content
+      await new Promise(r => setTimeout(r, 100))
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
@@ -391,6 +394,7 @@ export const useSessionStore = create<State>((set, get) => ({
       tab.title = title || 'Resumed Session'
       tab.workingDirectory = defaultDir
       tab.hasChosenDirectory = !!projectPath
+      window.clui.resizeHeight(600)
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,

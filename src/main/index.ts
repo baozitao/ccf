@@ -242,18 +242,34 @@ ipcMain.on(IPC.HIDE_WINDOW, () => {
 })
 
 let isDraggingWindow = false
-ipcMain.on('clui:drag-window', (_e, dx: number, dy: number) => {
-  if (!mainWindow) return
-  if (dx === 0 && dy === 0) {
-    // Drag ended
-    isDraggingWindow = false
-    return
-  }
-  if (!isDraggingWindow) {
-    isDraggingWindow = true
-  }
-  const [x, y] = mainWindow.getPosition()
-  mainWindow.setPosition(x + dx, y + dy)
+let dragInterval: ReturnType<typeof setInterval> | null = null
+let dragLastCursor = { x: 0, y: 0 }
+
+// Main-process cursor polling drag — immune to renderer losing mouse events
+ipcMain.on('clui:drag-start', () => {
+  if (!mainWindow || isDraggingWindow) return
+  isDraggingWindow = true
+  const cur = screen.getCursorScreenPoint()
+  dragLastCursor = { x: cur.x, y: cur.y }
+  dragInterval = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
+      return
+    }
+    const cur = screen.getCursorScreenPoint()
+    const dx = cur.x - dragLastCursor.x
+    const dy = cur.y - dragLastCursor.y
+    dragLastCursor = { x: cur.x, y: cur.y }
+    if (dx !== 0 || dy !== 0) {
+      const [wx, wy] = mainWindow.getPosition()
+      mainWindow.setPosition(wx + dx, wy + dy)
+    }
+  }, 16)
+})
+
+ipcMain.on('clui:drag-end', () => {
+  isDraggingWindow = false
+  if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
 })
 
 ipcMain.handle(IPC.IS_VISIBLE, () => {

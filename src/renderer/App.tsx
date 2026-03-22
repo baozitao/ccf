@@ -173,23 +173,15 @@ export default function App() {
         onMouseDown={(e) => {
           if (e.button !== 2) return
           e.preventDefault()
-          let lastX = e.screenX, lastY = e.screenY
-          let dragging = false
-          const onMove = (ev: MouseEvent) => {
-            const dx = ev.screenX - lastX, dy = ev.screenY - lastY
-            lastX = ev.screenX; lastY = ev.screenY
-            if (dx !== 0 || dy !== 0) {
-              dragging = true
-              window.clui.dragWindow(dx, dy)
-            }
-          }
+          // Tell main process to start polling cursor position — no renderer events needed
+          window.clui.dragStart()
           const onUp = () => {
-            document.removeEventListener('mousemove', onMove)
             document.removeEventListener('mouseup', onUp)
-            window.clui.dragWindow(0, 0)
+            window.removeEventListener('blur', onUp)
+            window.clui.dragEnd()
           }
-          document.addEventListener('mousemove', onMove)
           document.addEventListener('mouseup', onUp)
+          window.addEventListener('blur', onUp)  // stop if window loses focus
         }}
       >
 
