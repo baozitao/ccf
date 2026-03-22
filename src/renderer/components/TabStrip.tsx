@@ -177,7 +177,7 @@ export function TabStrip() {
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <span className="truncate flex-1">{tab.title}</span>
+                    <span className="truncate flex-1" title={tab.title}>{tab.title}</span>
                   )}
                   {tabs.length > 1 && (
                     <button
