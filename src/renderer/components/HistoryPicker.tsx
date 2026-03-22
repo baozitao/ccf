@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { Clock, ChatCircle } from '@phosphor-icons/react'
+import { Clock, ChatCircle, Trash, PencilSimple } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors } from '../theme'
@@ -42,6 +42,8 @@ export function HistoryPicker() {
   const [open, setOpen] = useState(false)
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [loading, setLoading] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ right: number; top?: number; bottom?: number; maxHeight?: number }>({ right: 0 })
@@ -97,10 +99,44 @@ export function HistoryPicker() {
 
   const handleSelect = (session: SessionMeta) => {
     setOpen(false)
-    const title = session.firstMessage
-      ? (session.firstMessage.length > 30 ? session.firstMessage.substring(0, 27) + '...' : session.firstMessage)
-      : session.slug || 'Resumed'
+    const title = session.customName
+      || (session.firstMessage
+        ? (session.firstMessage.length > 30 ? session.firstMessage.substring(0, 27) + '...' : session.firstMessage)
+        : session.slug || 'Resumed')
     void resumeSession(session.sessionId, title, effectiveProjectPath)
+  }
+
+  const handleDelete = async (e: React.MouseEvent, session: SessionMeta) => {
+    e.stopPropagation()
+    const result = await window.clui.deleteSession(session.sessionId, effectiveProjectPath)
+    if (result.success) {
+      setSessions((prev) => prev.filter((s) => s.sessionId !== session.sessionId))
+    }
+  }
+
+  const handleStartRename = (e: React.MouseEvent, session: SessionMeta) => {
+    e.stopPropagation()
+    setEditingId(session.sessionId)
+    setEditName(session.customName || session.firstMessage || session.slug || '')
+  }
+
+  const handleFinishRename = async (sessionId: string) => {
+    setEditingId(null)
+    const trimmed = editName.trim()
+    const result = await window.clui.renameSession(sessionId, trimmed, effectiveProjectPath)
+    if (result.success) {
+      setSessions((prev) => prev.map((s) =>
+        s.sessionId === sessionId ? { ...s, customName: trimmed || null } : s
+      ))
+      // Sync: if this session is open in a tab, update the tab title too
+      if (trimmed) {
+        useSessionStore.setState((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.claudeSessionId === sessionId ? { ...t, title: trimmed } : t
+          ),
+        }))
+      }
+    }
   }
 
   return (
@@ -160,23 +196,56 @@ export function HistoryPicker() {
             )}
 
             {!loading && sessions.map((session) => (
-              <button
+              <div
                 key={session.sessionId}
-                onClick={() => handleSelect(session)}
-                className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors"
+                className="group w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer"
+                onClick={() => editingId !== session.sessionId && handleSelect(session)}
               >
                 <ChatCircle size={13} className="flex-shrink-0 mt-0.5" style={{ color: colors.textTertiary }} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] truncate" style={{ color: colors.textPrimary }}>
-                    {session.firstMessage || session.slug || session.sessionId.substring(0, 8)}
-                  </div>
+                  {editingId === session.sessionId ? (
+                    <input
+                      autoFocus
+                      className="text-[11px] w-full bg-transparent outline-none border-b"
+                      style={{ color: colors.textPrimary, borderColor: colors.textTertiary }}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={() => handleFinishRename(session.sessionId)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleFinishRename(session.sessionId)
+                        if (e.key === 'Escape') setEditingId(null)
+                        e.stopPropagation()
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <div className="text-[11px] truncate" style={{ color: colors.textPrimary }}>
+                      {session.customName || session.firstMessage || session.slug || session.sessionId.substring(0, 8)}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-[10px] mt-0.5" style={{ color: colors.textTertiary }}>
                     <span>{formatTimeAgo(session.lastTimestamp)}</span>
                     <span>{formatSize(session.size)}</span>
                     {session.slug && <span className="truncate">{session.slug}</span>}
                   </div>
                 </div>
-              </button>
+                <button
+                  onClick={(e) => handleStartRename(e, session)}
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
+                  style={{ color: colors.textTertiary }}
+                  title="Rename session"
+                >
+                  <PencilSimple size={12} />
+                </button>
+                <button
+                  onClick={(e) => handleDelete(e, session)}
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
+                  style={{ color: colors.textTertiary }}
+                  title="Delete session"
+                >
+                  <Trash size={12} />
+                </button>
+              </div>
             ))}
           </div>
         </motion.div>,

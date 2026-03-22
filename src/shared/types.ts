@@ -266,6 +266,7 @@ export interface SessionMeta {
   firstMessage: string | null
   lastTimestamp: string
   size: number
+  customName?: string | null
 }
 
 export interface SessionLoadMessage {
@@ -321,6 +322,8 @@ export const IPC = {
   ANIMATE_HEIGHT: 'clui:animate-height',
   LIST_SESSIONS: 'clui:list-sessions',
   LOAD_SESSION: 'clui:load-session',
+  DELETE_SESSION: 'clui:delete-session',
+  RENAME_SESSION: 'clui:rename-session',
 
   // One-way events (main → renderer)
   TEXT_CHUNK: 'clui:text-chunk',

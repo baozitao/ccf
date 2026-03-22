@@ -1,16 +1,16 @@
 {
-  "name": "clui",
+  "name": "ccf",
   "version": "0.1.0",
   "description": "Clui CC — Command Line User Interface for Claude Code",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lcoutodemos/clui-cc.git"
+    "url": "https://github.com/baozitao/ccf.git"
   },
   "bugs": {
-    "url": "https://github.com/lcoutodemos/clui-cc/issues"
+    "url": "https://github.com/baozitao/ccf/issues"
   },
-  "homepage": "https://github.com/lcoutodemos/clui-cc#readme",
+  "homepage": "https://github.com/baozitao/ccf#readme",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

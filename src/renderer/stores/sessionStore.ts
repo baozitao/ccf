@@ -191,26 +191,17 @@ export const useSessionStore = create<State>((set, get) => ({
   selectTab: (tabId) => {
     const s = get()
     if (tabId === s.activeTabId) {
-      // Clicking the already-active tab: toggle global expand/collapse
-      const willExpand = !s.isExpanded
-      set((prev) => ({
-        isExpanded: willExpand,
-        marketplaceOpen: false,
-        // Expanding = reading: clear unread flag
-        tabs: willExpand
-          ? prev.tabs.map((t) => t.id === tabId ? { ...t, hasUnread: false } : t)
-          : prev.tabs,
-      }))
-    } else {
-      // Switching to a different tab: mark as read
-      set((prev) => ({
-        activeTabId: tabId,
-        marketplaceOpen: false,
-        tabs: prev.tabs.map((t) =>
-          t.id === tabId ? { ...t, hasUnread: false } : t
-        ),
-      }))
+      // Already active — do nothing (double-click on empty area toggles expand)
+      return
     }
+    // Switching to a different tab: mark as read
+    set((prev) => ({
+      activeTabId: tabId,
+      marketplaceOpen: false,
+      tabs: prev.tabs.map((t) =>
+        t.id === tabId ? { ...t, hasUnread: false } : t
+      ),
+    }))
   },
 
   toggleExpanded: () => {

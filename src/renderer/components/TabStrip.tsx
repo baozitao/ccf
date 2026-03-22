@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
@@ -43,12 +43,66 @@ export function TabStrip() {
   const createTab = useSessionStore((s) => s.createTab)
   const closeTab = useSessionStore((s) => s.closeTab)
   const colors = useColors()
+  const [editingTabId, setEditingTabId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleClick = useCallback((tabId: string) => {
+    if (editingTabId) return
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+      return // double-click detected, skip selectTab
+    }
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      selectTab(tabId)
+    }, 250)
+  }, [editingTabId, selectTab])
+
+  const handleDoubleClick = (e: React.MouseEvent, tabId: string, currentTitle: string) => {
+    e.stopPropagation()
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    setEditingTabId(tabId)
+    setEditTitle(currentTitle)
+  }
+
+  const handleFinishEdit = (tabId: string) => {
+    setEditingTabId(null)
+    if (editTitle.trim()) {
+      const state = useSessionStore.getState()
+      const tab = state.tabs.find((t) => t.id === tabId)
+      const activeTab = state.tabs.find((t) => t.id === state.activeTabId)
+      useSessionStore.setState((s) => ({
+        tabs: s.tabs.map((t) => t.id === tabId ? { ...t, title: editTitle.trim() } : t),
+      }))
+      // Persist rename to session history
+      if (tab?.claudeSessionId) {
+        const projectPath = activeTab?.hasChosenDirectory
+          ? activeTab.workingDirectory
+          : (state.staticInfo?.homePath || activeTab?.workingDirectory || '~')
+        window.clui.renameSession(tab.claudeSessionId, editTitle.trim(), projectPath).catch(() => {})
+      }
+    }
+  }
+
+  const toggleExpanded = useSessionStore((s) => s.toggleExpanded)
 
   return (
     <div
       data-clui-ui
       className="flex items-center no-drag"
       style={{ padding: '8px 0' }}
+      onDoubleClick={(e) => {
+        // Double-click on empty area (not on tabs/buttons) toggles expand
+        const target = e.target as HTMLElement
+        if (!target.closest('button, [role="tab"], .group')) {
+          toggleExpanded()
+        }
+      }}
     >
       {/* Scrollable tabs area — clipped by master card edge */}
       <div className="relative min-w-0 flex-1">
@@ -57,10 +111,7 @@ export function TabStrip() {
           style={{
             scrollbarWidth: 'none',
             paddingLeft: 8,
-            // Extra right breathing room so clipped tabs fade out before the edge.
             paddingRight: 14,
-            // Right-only content fade so the parent card's own animated background
-            // shows through cleanly in both collapsed and expanded states.
             maskImage: 'linear-gradient(to right, black 0%, black calc(100% - 40px), transparent 100%)',
             WebkitMaskImage: 'linear-gradient(to right, black 0%, black calc(100% - 40px), transparent 100%)',
           }}
@@ -76,7 +127,8 @@ export function TabStrip() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
-                  onClick={() => selectTab(tab.id)}
+                  onClick={() => handleClick(tab.id)}
+                  onDoubleClick={(e) => handleDoubleClick(e, tab.id, tab.title)}
                   className="group flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0 max-w-[160px] transition-all duration-150"
                   style={{
                     background: isActive ? colors.tabActive : 'transparent',
@@ -89,7 +141,24 @@ export function TabStrip() {
                   }}
                 >
                   <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
-                  <span className="truncate flex-1">{tab.title}</span>
+                  {editingTabId === tab.id ? (
+                    <input
+                      autoFocus
+                      className="truncate flex-1 bg-transparent outline-none text-[12px]"
+                      style={{ color: colors.textPrimary, width: 80 }}
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onBlur={() => handleFinishEdit(tab.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleFinishEdit(tab.id)
+                        if (e.key === 'Escape') setEditingTabId(null)
+                        e.stopPropagation()
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="truncate flex-1">{tab.title}</span>
+                  )}
                   {tabs.length > 1 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}

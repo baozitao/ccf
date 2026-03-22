@@ -30,7 +30,7 @@ const controlPlane = new ControlPlane(INTERACTIVE_PTY)
 
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
-const BAR_WIDTH = 1040
+const BAR_WIDTH = 920
 const PILL_HEIGHT = 720  // Fixed native window height — extra room for expanded UI + shadow buffers
 const PILL_BOTTOM_MARGIN = 24
 
@@ -90,6 +90,10 @@ controlPlane.on('error', (tabId: string, error: EnrichedError) => {
   broadcast('clui:enriched-error', tabId, error)
 })
 
+// ─── Window Shape (click-through for transparent areas on Linux) ───
+
+
+
 // ─── Window Creation ───
 
 function createWindow(): void {
@@ -117,7 +121,7 @@ function createWindow(): void {
     roundedCorners: true,
     backgroundColor: '#00000000',
     show: false,
-    icon: join(__dirname, '../../resources/icon.icns'),
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -128,14 +132,17 @@ function createWindow(): void {
   // Belt-and-suspenders: panel already joins all spaces and floats,
   // but explicit flags ensure correct behavior on older Electron builds.
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  mainWindow.setAlwaysOnTop(true, 'screen-saver')
+  // Linux/Wayland: use 'floating' level so blur fires correctly when clicking other windows
+  // macOS: 'screen-saver' is needed for accessory app behavior
+  mainWindow.setAlwaysOnTop(true, process.platform === 'darwin' ? 'screen-saver' : 'floating')
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
-    // Enable OS-level click-through for transparent regions.
-    // { forward: true } ensures mousemove events still reach the renderer
-    // so it can toggle click-through off when cursor enters interactive UI.
-    mainWindow?.setIgnoreMouseEvents(true, { forward: true })
+    // macOS: start with click-through, renderer toggles per cursor position
+    // Linux: start interactive, renderer handles ignore via mousemove
+    if (process.platform === 'darwin') {
+      mainWindow?.setIgnoreMouseEvents(true, { forward: true })
+    }
     if (process.env.ELECTRON_RENDERER_URL) {
       mainWindow?.webContents.openDevTools({ mode: 'detach' })
     }
@@ -150,6 +157,15 @@ function createWindow(): void {
     }
   })
 
+  // Hide on blur — works on macOS; on Linux/Wayland use ESC or F3 toggle
+  if (process.platform !== 'linux') {
+    mainWindow.on('blur', () => {
+      if (mainWindow && mainWindow.isVisible()) {
+        mainWindow.hide()
+      }
+    })
+  }
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -161,29 +177,12 @@ function showWindow(source = 'unknown'): void {
   if (!mainWindow) return
   const toggleId = ++toggleSequence
 
-  // Position on the display where the cursor currently is (not always primary)
-  const cursor = screen.getCursorScreenPoint()
-  const display = screen.getDisplayNearestPoint(cursor)
-  const { width: sw, height: sh } = display.workAreaSize
-  const { x: dx, y: dy } = display.workArea
-  mainWindow.setBounds({
-    x: dx + Math.round((sw - BAR_WIDTH) / 2),
-    y: dy + sh - PILL_HEIGHT - PILL_BOTTOM_MARGIN,
-    width: BAR_WIDTH,
-    height: PILL_HEIGHT,
-  })
-
-  // Always re-assert space membership — the flag can be lost after hide/show cycles
-  // and must be set before show() so the window joins the active Space, not its
-  // last-known Space.
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   if (SPACES_DEBUG) {
-    log(`[spaces] showWindow#${toggleId} source=${source} move-to-display id=${display.id}`)
+    log(`[spaces] showWindow#${toggleId} source=${source}`)
     snapshotWindowState(`showWindow#${toggleId} pre-show`)
   }
-  // As an accessory app (app.dock.hide), show() + focus gives keyboard
-  // without deactivating the active app — hover preserved everywhere.
   mainWindow.show()
   mainWindow.webContents.focus()
   broadcast(IPC.WINDOW_SHOWN)
@@ -210,8 +209,15 @@ function toggleWindow(source = 'unknown'): void {
 // Fixed-height mode: ignore renderer resize events to prevent jank.
 // The native window stays at PILL_HEIGHT; all expand/collapse happens inside the renderer.
 
-ipcMain.on(IPC.RESIZE_HEIGHT, () => {
-  // No-op — fixed height window, no dynamic resize
+ipcMain.on(IPC.RESIZE_HEIGHT, (_e, _height: number, rects?: Array<{x: number; y: number; width: number; height: number}>) => {
+  if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'linux') return
+  if (rects && rects.length > 0) {
+    try {
+      mainWindow.setShape(rects)
+    } catch (err: any) {
+      log(`setShape error: ${err.message}`)
+    }
+  }
 })
 
 ipcMain.on(IPC.SET_WINDOW_WIDTH, () => {
@@ -223,7 +229,15 @@ ipcMain.handle(IPC.ANIMATE_HEIGHT, () => {
 })
 
 ipcMain.on(IPC.HIDE_WINDOW, () => {
-  mainWindow?.hide()
+  if (mainWindow) {
+    mainWindow.hide()
+  }
+})
+
+ipcMain.on('clui:drag-window', (_e, dx: number, dy: number) => {
+  if (!mainWindow) return
+  const [x, y] = mainWindow.getPosition()
+  mainWindow.setPosition(x + dx, y + dy)
 })
 
 ipcMain.handle(IPC.IS_VISIBLE, () => {
@@ -416,6 +430,16 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
       }
     }
 
+    // Load custom names
+    const namesFile = join(sessionsDir, '.session-names.json')
+    let customNames: Record<string, string> = {}
+    if (existsSync(namesFile)) {
+      try { customNames = JSON.parse(require('fs').readFileSync(namesFile, 'utf-8')) } catch {}
+    }
+    for (const s of sessions) {
+      if (customNames[s.sessionId]) s.customName = customNames[s.sessionId]
+    }
+
     // Sort by last timestamp, most recent first
     sessions.sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime())
     return sessions.slice(0, 20) // Return top 20
@@ -481,6 +505,49 @@ ipcMain.handle(IPC.LOAD_SESSION, async (_e, arg: { sessionId: string; projectPat
   } catch (err) {
     log(`LOAD_SESSION error: ${err}`)
     return []
+  }
+})
+
+ipcMain.handle(IPC.DELETE_SESSION, async (_e, arg: { sessionId: string; projectPath?: string }) => {
+  const { unlinkSync } = require('fs')
+  const projectPath = arg.projectPath || process.cwd()
+  const encodedPath = projectPath.replace(/\//g, '-')
+  const sessionsDir = join(homedir(), '.claude', 'projects', encodedPath)
+  const filePath = join(sessionsDir, `${arg.sessionId}.jsonl`)
+  log(`IPC DELETE_SESSION: ${filePath}`)
+  try {
+    if (existsSync(filePath)) {
+      unlinkSync(filePath)
+      return { success: true }
+    }
+    return { success: false, error: 'Session file not found' }
+  } catch (err: any) {
+    log(`DELETE_SESSION error: ${err.message}`)
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle(IPC.RENAME_SESSION, async (_e, arg: { sessionId: string; name: string; projectPath?: string }) => {
+  const { readFileSync, writeFileSync } = require('fs')
+  const projectPath = arg.projectPath || process.cwd()
+  const encodedPath = projectPath.replace(/\//g, '-')
+  const namesFile = join(homedir(), '.claude', 'projects', encodedPath, '.session-names.json')
+  log(`IPC RENAME_SESSION: ${arg.sessionId} → "${arg.name}"`)
+  try {
+    let names: Record<string, string> = {}
+    if (existsSync(namesFile)) {
+      try { names = JSON.parse(readFileSync(namesFile, 'utf-8')) } catch {}
+    }
+    if (arg.name.trim()) {
+      names[arg.sessionId] = arg.name.trim()
+    } else {
+      delete names[arg.sessionId]
+    }
+    writeFileSync(namesFile, JSON.stringify(names, null, 2))
+    return { success: true }
+  } catch (err: any) {
+    log(`RENAME_SESSION error: ${err.message}`)
+    return { success: false, error: err.message }
   }
 })
 
@@ -578,10 +645,23 @@ ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
     const timestamp = Date.now()
     const screenshotPath = join(tmpdir(), `clui-screenshot-${timestamp}.png`)
 
-    execSync(`/usr/sbin/screencapture -i "${screenshotPath}"`, {
-      timeout: 30000,
-      stdio: 'ignore',
-    })
+    if (process.platform === 'darwin') {
+      execSync(`/usr/sbin/screencapture -i "${screenshotPath}"`, {
+        timeout: 30000,
+        stdio: 'ignore',
+      })
+    } else {
+      // Linux: try gnome-screenshot (area select), then scrot, then import (ImageMagick)
+      try {
+        execSync(`gnome-screenshot -a -f "${screenshotPath}"`, { timeout: 30000, stdio: 'ignore' })
+      } catch {
+        try {
+          execSync(`scrot -s "${screenshotPath}"`, { timeout: 30000, stdio: 'ignore' })
+        } catch {
+          execSync(`import "${screenshotPath}"`, { timeout: 30000, stdio: 'ignore' })
+        }
+      }
+    }
 
     if (!existsSync(screenshotPath)) {
       return null
@@ -662,6 +742,9 @@ ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
       '/usr/local/bin/whisper-cli',
       '/opt/homebrew/bin/whisper',
       '/usr/local/bin/whisper',
+      '/usr/bin/whisper-cli',
+      '/usr/bin/whisper',
+      join(homedir(), '.local/bin/whisper-cli'),
       join(homedir(), '.local/bin/whisper'),
     ]
 
@@ -671,19 +754,26 @@ ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
     }
 
     if (!whisperBin) {
+      const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
+      const whichCmd = process.platform === 'darwin' ? 'whence -p' : 'which'
       try {
-        whisperBin = execSync('/bin/zsh -lc "whence -p whisper-cli"', { encoding: 'utf-8' }).trim()
+        whisperBin = execSync(`${shell} -lc "${whichCmd} whisper-cli"`, { encoding: 'utf-8' }).trim()
       } catch {}
     }
     if (!whisperBin) {
+      const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
+      const whichCmd = process.platform === 'darwin' ? 'whence -p' : 'which'
       try {
-        whisperBin = execSync('/bin/zsh -lc "whence -p whisper"', { encoding: 'utf-8' }).trim()
+        whisperBin = execSync(`${shell} -lc "${whichCmd} whisper"`, { encoding: 'utf-8' }).trim()
       } catch {}
     }
 
     if (!whisperBin) {
+      const installHint = process.platform === 'darwin'
+        ? 'brew install whisper-cli'
+        : 'pip install openai-whisper  # or: apt install whisper-cpp'
       return {
-        error: 'Whisper not found. Install with: brew install whisper-cli',
+        error: `Whisper not found. Install with: ${installHint}`,
         transcript: null,
       }
     }
@@ -727,11 +817,15 @@ ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
         { encoding: 'utf-8', timeout: 30000 }
       )
     } else {
-      // Python whisper: auto-detect language unless English-only model
+      // Python whisper: prefer larger models for better Chinese accuracy
       const langFlag = isEnglishOnly ? '--language en' : ''
+      // Use small model (good Chinese accuracy, reasonable CPU speed)
+      // medium/large too slow without GPU acceleration
+      const model = existsSync(join(homedir(), '.cache/whisper/small.pt')) ? 'small' : 'tiny'
+      log(`Python whisper using model: ${model}`)
       output = execSync(
-        `"${whisperBin}" "${tmpWav}" --model tiny ${langFlag} --output_format txt --output_dir "${tmpdir()}"`,
-        { encoding: 'utf-8', timeout: 30000 }
+        `"${whisperBin}" "${tmpWav}" --model ${model} ${langFlag} --output_format txt --output_dir "${tmpdir()}"`,
+        { encoding: 'utf-8', timeout: 60000 }
       )
       // Python whisper writes .txt file
       const txtPath = tmpWav.replace('.wav', '.txt')
@@ -810,25 +904,48 @@ ipcMain.handle(IPC.OPEN_IN_TERMINAL, (_event, arg: string | null | { sessionId?:
     projectPath = arg.projectPath && arg.projectPath !== '~' ? arg.projectPath : process.cwd()
   }
 
-  // Escape for AppleScript: double quotes → backslash-escaped, backslashes doubled
-  const projectDir = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   let cmd: string
   if (sessionId) {
-    cmd = `cd \\"${projectDir}\\" && ${claudeBin} --resume ${sessionId}`
+    cmd = `cd "${projectPath}" && ${claudeBin} --resume ${sessionId}`
   } else {
-    cmd = `cd \\"${projectDir}\\" && ${claudeBin}`
+    cmd = `cd "${projectPath}" && ${claudeBin}`
   }
 
-  const script = `tell application "Terminal"
-  activate
-  do script "${cmd}"
-end tell`
-
   try {
-    execFile('/usr/bin/osascript', ['-e', script], (err: Error | null) => {
-      if (err) log(`Failed to open terminal: ${err.message}`)
-      else log(`Opened terminal with: ${cmd}`)
-    })
+    if (process.platform === 'darwin') {
+      const projectDir = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+      const macCmd = sessionId
+        ? `cd \\"${projectDir}\\" && ${claudeBin} --resume ${sessionId}`
+        : `cd \\"${projectDir}\\" && ${claudeBin}`
+      const script = `tell application "Terminal"\n  activate\n  do script "${macCmd}"\nend tell`
+      execFile('/usr/bin/osascript', ['-e', script], (err: Error | null) => {
+        if (err) log(`Failed to open terminal: ${err.message}`)
+        else log(`Opened terminal with: ${macCmd}`)
+      })
+    } else {
+      // Linux: try common terminal emulators with absolute paths
+      const terminals: [string, string[]][] = [
+        ['/usr/bin/gnome-terminal', ['--', 'bash', '-c', `${cmd}; exec bash`]],
+        ['/usr/bin/xterm', ['-e', `bash -c '${cmd}; exec bash'`]],
+        ['/usr/bin/konsole', ['-e', 'bash', '-c', `${cmd}; exec bash`]],
+        ['/usr/bin/xfce4-terminal', ['-e', `bash -c '${cmd}; exec bash'`]],
+      ]
+      let launched = false
+      for (const [bin, args] of terminals) {
+        if (existsSync(bin)) {
+          execFile(bin, args, (err: Error | null) => {
+            if (err) log(`Failed to open terminal (${bin}): ${err.message}`)
+            else log(`Opened terminal (${bin}) with: ${cmd}`)
+          })
+          launched = true
+          break
+        }
+      }
+      if (!launched) {
+        log('No supported terminal emulator found')
+        return false
+      }
+    }
     return true
   } catch (err: unknown) {
     log(`Failed to open terminal: ${err}`)
@@ -940,17 +1057,35 @@ app.whenReady().then(async () => {
   }
 
 
-  // Primary: Option+Space (2 keys, doesn't conflict with shell)
-  // Fallback: Cmd+Shift+K kept as secondary shortcut
-  const registered = globalShortcut.register('Alt+Space', () => toggleWindow('shortcut Alt+Space'))
-  if (!registered) {
-    log('Alt+Space shortcut registration failed — macOS input sources may claim it')
+  // On Linux/Wayland, Electron's globalShortcut is unreliable — use SIGUSR1 for toggle
+  // and register GNOME custom keybinding externally. Keep Electron shortcuts as best-effort.
+  if (process.platform === 'linux') {
+    // Local HTTP toggle server for GNOME keybinding integration
+    const http = require('http')
+    const toggleServer = http.createServer((_req: any, res: any) => {
+      toggleWindow('http-toggle')
+      res.writeHead(200)
+      res.end('toggled')
+    })
+    toggleServer.listen(19850, '127.0.0.1', () => {
+      log('Toggle HTTP server listening on 127.0.0.1:19850')
+    })
   }
-  globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
 
-  const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
+  // macOS: register globalShortcut; Linux: use GNOME keybinding + HTTP toggle instead
+  if (process.platform === 'darwin') {
+    const registered = globalShortcut.register('Ctrl+Space', () => toggleWindow('shortcut Ctrl+Space'))
+    if (!registered) log('Ctrl+Space shortcut registration failed')
+    globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
+  } else {
+    log('Linux: F3 toggle via GNOME keybinding → HTTP 19850')
+  }
+
+  const trayIconPath = join(__dirname, process.platform === 'darwin'
+    ? '../../resources/trayTemplate.png'
+    : '../../resources/icon.png')
   const trayIcon = nativeImage.createFromPath(trayIconPath)
-  trayIcon.setTemplateImage(true)
+  if (process.platform === 'darwin') trayIcon.setTemplateImage(true)
   tray = new Tray(trayIcon)
   tray.setToolTip('Clui CC — Claude Code UI')
   tray.on('click', () => toggleWindow('tray click'))
@@ -975,7 +1110,5 @@ app.on('will-quit', () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // Keep running in tray on both macOS and Linux
 })

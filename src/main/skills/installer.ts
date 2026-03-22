@@ -94,11 +94,12 @@ async function installGithubSkill(
     const pathDepth = path.split('/').length + 1 // +1 for the github top-level dir
     const tarballUrl = `https://api.github.com/repos/${repo}/tarball/${commitSha}`
 
-    // Use curl + tar — both always available on macOS
+    // Use curl + tar — on Linux, GNU tar needs --wildcards for glob patterns
+    const wildcardFlag = process.platform === 'linux' ? '--wildcards ' : ''
     const cmd = [
       `curl -sL "${tarballUrl}"`,
       '|',
-      `tar -xz --strip-components=${pathDepth} -C "${tmpDir}" "*/${path}"`,
+      `tar -xz ${wildcardFlag}--strip-components=${pathDepth} -C "${tmpDir}" "*/${path}"`,
     ].join(' ')
 
     execSync(cmd, { timeout: 60000, stdio: 'pipe' })

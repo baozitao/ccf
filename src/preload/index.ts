@@ -26,6 +26,8 @@ export interface CluiAPI {
   resetTabSession(tabId: string): void
   listSessions(projectPath?: string): Promise<SessionMeta[]>
   loadSession(sessionId: string, projectPath?: string): Promise<SessionLoadMessage[]>
+  deleteSession(sessionId: string, projectPath?: string): Promise<{ success: boolean; error?: string }>
+  renameSession(sessionId: string, name: string, projectPath?: string): Promise<{ success: boolean; error?: string }>
   fetchMarketplace(forceRefresh?: boolean): Promise<{ plugins: CatalogPlugin[]; error: string | null }>
   listInstalledPlugins(): Promise<string[]>
   installPlugin(repo: string, pluginName: string, marketplace: string, sourcePath?: string, isSkillMd?: boolean): Promise<{ ok: boolean; error?: string }>
@@ -35,10 +37,11 @@ export interface CluiAPI {
   onThemeChange(callback: (isDark: boolean) => void): () => void
 
   // ─── Window management ───
-  resizeHeight(height: number): void
+  resizeHeight(height: number, rects?: any): void
   setWindowWidth(width: number): void
   animateHeight(from: number, to: number, durationMs: number): Promise<void>
   hideWindow(): void
+  dragWindow(dx: number, dy: number): void
   isVisible(): Promise<boolean>
   /** OS-level click-through for transparent window regions */
   setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): void
@@ -76,6 +79,8 @@ const api: CluiAPI = {
   resetTabSession: (tabId) => ipcRenderer.send(IPC.RESET_TAB_SESSION, tabId),
   listSessions: (projectPath?: string) => ipcRenderer.invoke(IPC.LIST_SESSIONS, projectPath),
   loadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke(IPC.LOAD_SESSION, { sessionId, projectPath }),
+  deleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke(IPC.DELETE_SESSION, { sessionId, projectPath }),
+  renameSession: (sessionId: string, name: string, projectPath?: string) => ipcRenderer.invoke(IPC.RENAME_SESSION, { sessionId, name, projectPath }),
   fetchMarketplace: (forceRefresh) => ipcRenderer.invoke(IPC.MARKETPLACE_FETCH, { forceRefresh }),
   listInstalledPlugins: () => ipcRenderer.invoke(IPC.MARKETPLACE_INSTALLED),
   installPlugin: (repo, pluginName, marketplace, sourcePath, isSkillMd) =>
@@ -91,10 +96,11 @@ const api: CluiAPI = {
   },
 
   // ─── Window management ───
-  resizeHeight: (height) => ipcRenderer.send(IPC.RESIZE_HEIGHT, height),
+  resizeHeight: (height, rects) => ipcRenderer.send(IPC.RESIZE_HEIGHT, height, rects),
   animateHeight: (from, to, durationMs) =>
     ipcRenderer.invoke(IPC.ANIMATE_HEIGHT, { from, to, durationMs }),
   hideWindow: () => ipcRenderer.send(IPC.HIDE_WINDOW),
+  dragWindow: (dx, dy) => ipcRenderer.send('clui:drag-window', dx, dy),
   isVisible: () => ipcRenderer.invoke(IPC.IS_VISIBLE),
   setIgnoreMouseEvents: (ignore, options) =>
     ipcRenderer.send(IPC.SET_IGNORE_MOUSE_EVENTS, ignore, options || {}),

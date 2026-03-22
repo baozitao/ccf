@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 48px; height: 48px;
+    background: transparent;
+    overflow: hidden;
+    -webkit-app-region: no-drag;
+    user-select: none;
+  }
+  .fab {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
+    position: relative;
+    margin: 1px;
+  }
+  .fab:hover {
+    transform: scale(1.08);
+  }
+  .fab:active {
+    cursor: grabbing;
+  }
+  .fab svg {
+    width: 17px; height: 17px;
+  }
+  .fab.dragging {
+    transform: scale(1.12);
+    cursor: grabbing;
+  }
+  @keyframes thinking-pulse {
+    0%   { box-shadow: var(--base-shadow), 0 0 0 0 var(--pulse-color); }
+    50%  { box-shadow: var(--base-shadow), 0 0 8px 4px var(--pulse-color); }
+    100% { box-shadow: var(--base-shadow), 0 0 0 0 var(--pulse-color); }
+  }
+  @keyframes thinking-spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .fab.thinking {
+    animation: thinking-pulse 1.5s ease-in-out infinite;
+  }
+  .fab.thinking svg {
+    animation: thinking-spin 3s linear infinite;
+  }
+</style>
+</head>
+<body>
+<div class="fab" id="fab">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/>
+  </svg>
+</div>
+<script>
+  const { ipcRenderer } = require('electron')
+  const fab = document.getElementById('fab')
+  let baseShadow = ''
+
+  ipcRenderer.on('fab:theme', (_e, colors) => {
+    fab.style.background = colors.bg
+    fab.style.color = colors.color
+    fab.style.border = colors.border
+    baseShadow = colors.shadow
+    fab.style.boxShadow = baseShadow
+    fab.style.setProperty('--base-shadow', baseShadow)
+    fab.style.setProperty('--pulse-color', colors.pulseColor || 'rgba(99,102,241,0.5)')
+    // Hover colors
+    fab.onmouseenter = () => { fab.style.color = colors.hoverColor; fab.style.background = colors.hoverBg }
+    fab.onmouseleave = () => { fab.style.color = colors.color; fab.style.background = colors.bg }
+  })
+
+  ipcRenderer.on('fab:status', (_e, isRunning) => {
+    fab.classList.toggle('thinking', isRunning)
+  })
+
+  let isDragging = false
+  let dragStartX = 0, dragStartY = 0
+
+  fab.addEventListener('mousedown', (e) => {
+    isDragging = false
+    dragStartX = e.screenX
+    dragStartY = e.screenY
+    fab.classList.add('dragging')
+    const onMove = (e) => {
+      const dx = e.screenX - dragStartX
+      const dy = e.screenY - dragStartY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        isDragging = true
+        ipcRenderer.send('fab:drag', dx, dy)
+        dragStartX = e.screenX
+        dragStartY = e.screenY
+      }
+    }
+    const onUp = () => {
+      fab.classList.remove('dragging')
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      if (isDragging) ipcRenderer.send('fab:drag-end')
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  })
+
+  fab.addEventListener('dblclick', (e) => {
+    e.preventDefault()
+    ipcRenderer.send('fab:toggle')
+  })
+
+  ipcRenderer.send('fab:ready')
+</script>
+</body>
+</html>

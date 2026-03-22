@@ -28,7 +28,12 @@ Desktop.ini
 
 # Logs
 *.log
-~/.clui-debug.log
+.clui-debug.log
+
+# Packages
+*.deb
+*.rpm
+*.AppImage
 
 # Runtime
 .clui.pid
