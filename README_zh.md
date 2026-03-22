@@ -191,21 +191,58 @@ npm run build:linux
 
 ---
 
-## 🏗️ 工作原理
+## 🏗️ 架构
 
-```
-用户输入
-    │
-    ▼
-CCF Electron UI
-    │
-    ├─ 渲染进程（React UI、标签页、历史记录）
-    │
-    └─ 主进程
-         │
-         ├─ 启动：claude -p  ──► NDJSON 流 ──► 实时渲染
-         │
-         └─ 工具调用？──► 权限审批 UI ──► 允许 / 拒绝
+```mermaid
+graph TB
+    subgraph "🖥️ 桌面"
+        FAB["🔘 浮动窗口<br/>始终置顶"]
+        TRAY["📌 系统托盘"]
+    end
+
+    subgraph "⚡ Electron 主进程"
+        IPC["📡 IPC 桥接"]
+        TOGGLE["🔄 HTTP 切换<br/>:19850"]
+        CTRL["🎮 控制面板"]
+        PTY["📟 node-pty"]
+        PERM["🔐 权限服务器<br/>:19836"]
+    end
+
+    subgraph "🎨 渲染器 (React + Tailwind)"
+        TABS["🗂️ 多标签管理"]
+        CHAT["💬 对话视图"]
+        INPUT["⌨️ 输入栏"]
+        MARKET["🛒 技能市场"]
+        HIST["📜 会话历史"]
+        THEME["🌗 主题引擎"]
+    end
+
+    subgraph "🔧 外部工具"
+        CC["Claude Code CLI"]
+        GNOME["🐧 GNOME 快捷键<br/>F3 → 切换"]
+        WHISPER["🎤 Whisper<br/>语音输入"]
+        SCREENSHOT["📸 gnome-screenshot"]
+    end
+
+    FAB --> IPC
+    TRAY --> IPC
+    GNOME -->|"curl :19850"| TOGGLE
+    TOGGLE --> IPC
+    IPC <--> TABS
+    IPC <--> CHAT
+    IPC <--> INPUT
+    IPC <--> MARKET
+    IPC <--> HIST
+    CTRL --> PTY
+    PTY -->|"stream-json"| CC
+    PERM -->|"allow/deny"| CC
+    INPUT -->|"🎤"| WHISPER
+    INPUT -->|"📸"| SCREENSHOT
+
+    style FAB fill:#f59e0b,color:#000,stroke:#f59e0b
+    style CC fill:#6366f1,color:#fff,stroke:#6366f1
+    style GNOME fill:#10b981,color:#fff,stroke:#10b981
+    style TOGGLE fill:#ef4444,color:#fff,stroke:#ef4444
 ```
 
 ---

@@ -193,19 +193,56 @@ Go to **Settings → Keyboard → Custom Shortcuts** and add:
 
 ## 🏗️ Architecture
 
-```
-User input
-    │
-    ▼
-CCF Electron UI
-    │
-    ├─ Renderer process (React UI, tabs, history)
-    │
-    └─ Main process
-         │
-         ├─ Spawns: claude -p  ──► NDJSON stream ──► live render
-         │
-         └─ Tool call? ──► Permission UI ──► approve / deny
+```mermaid
+graph TB
+    subgraph "🖥️ Desktop"
+        FAB["🔘 Floating Window<br/>Always on Top"]
+        TRAY["📌 System Tray"]
+    end
+
+    subgraph "⚡ Electron Main Process"
+        IPC["📡 IPC Bridge"]
+        TOGGLE["🔄 HTTP Toggle<br/>:19850"]
+        CTRL["🎮 Control Plane"]
+        PTY["📟 node-pty"]
+        PERM["🔐 Permission Server<br/>:19836"]
+    end
+
+    subgraph "🎨 Renderer (React + Tailwind)"
+        TABS["🗂️ Multi-Tab Manager"]
+        CHAT["💬 Conversation View"]
+        INPUT["⌨️ Input Bar"]
+        MARKET["🛒 Skills Marketplace"]
+        HIST["📜 Session History"]
+        THEME["🌗 Theme Engine"]
+    end
+
+    subgraph "🔧 External"
+        CC["Claude Code CLI"]
+        GNOME["🐧 GNOME Keybinding<br/>F3 → Toggle"]
+        WHISPER["🎤 Whisper<br/>Voice Input"]
+        SCREENSHOT["📸 gnome-screenshot"]
+    end
+
+    FAB --> IPC
+    TRAY --> IPC
+    GNOME -->|"curl :19850"| TOGGLE
+    TOGGLE --> IPC
+    IPC <--> TABS
+    IPC <--> CHAT
+    IPC <--> INPUT
+    IPC <--> MARKET
+    IPC <--> HIST
+    CTRL --> PTY
+    PTY -->|"stream-json"| CC
+    PERM -->|"allow/deny"| CC
+    INPUT -->|"🎤"| WHISPER
+    INPUT -->|"📸"| SCREENSHOT
+
+    style FAB fill:#f59e0b,color:#000,stroke:#f59e0b
+    style CC fill:#6366f1,color:#fff,stroke:#6366f1
+    style GNOME fill:#10b981,color:#fff,stroke:#10b981
+    style TOGGLE fill:#ef4444,color:#fff,stroke:#ef4444
 ```
 
 ---
