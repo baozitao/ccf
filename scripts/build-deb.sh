@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RELEASE_DIR="$PROJECT_DIR/release"
 PKG_NAME="ccf"
-PKG_VERSION="0.1.2"
+PKG_VERSION="0.1.3"
 ARCH="amd64"
 DEB_NAME="${PKG_NAME}_${PKG_VERSION}_${ARCH}.deb"
 
