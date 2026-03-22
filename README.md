@@ -35,6 +35,21 @@
 
 ---
 
+## ✨ Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/multi-tab.png" alt="Multi-tab sessions"/><br/><em>🗂️ Multi-tab session management with real-time AI responses</em></td>
+<td width="50%"><img src="docs/images/permission.png" alt="Permission approval"/><br/><em>🔐 Interactive permission approval — Allow or Deny each action</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/marketplace.png" alt="Skills Marketplace"/><br/><em>🛒 Skills & Plugin Marketplace — install with one click</em></td>
+<td width="50%"><img src="docs/images/light-theme.png" alt="Light theme"/><br/><em>🌗 Light & Dark theme support</em></td>
+</tr>
+</table>
+
+---
+
 ## What is CCF?
 
 **CCF (Claude Code Floating)** is an always-on-top, transparent floating overlay that wraps the Claude Code CLI in a sleek desktop UI. Toggle it with `F3`, drag it anywhere, manage multiple sessions in tabs, and let it disappear when you don't need it — all without leaving your workflow.

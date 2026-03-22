@@ -35,6 +35,21 @@
 
 ---
 
+## ✨ 截图展示
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/multi-tab.png" alt="多标签会话"/><br/><em>🗂️ 多标签会话管理，AI 实时响应</em></td>
+<td width="50%"><img src="docs/images/permission.png" alt="权限审批"/><br/><em>🔐 交互式权限审批 — 每个操作可允许或拒绝</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/marketplace.png" alt="技能市场"/><br/><em>🛒 Skills 技能/插件市场 — 一键安装</em></td>
+<td width="50%"><img src="docs/images/light-theme.png" alt="亮色主题"/><br/><em>🌗 亮色/暗色主题自动切换</em></td>
+</tr>
+</table>
+
+---
+
 ## CCF 是什么？
 
 **CCF（Claude Code Floating）** 是一个始终置顶的透明悬浮窗，将 Claude Code CLI 包裹在精美的桌面 UI 中。按 `F3` 呼出/收起，拖拽到任意位置，多标签管理会话，不用时一键隐藏——完全不打断你的工作流。
