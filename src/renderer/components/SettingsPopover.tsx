@@ -66,23 +66,12 @@ export function SettingsPopover() {
     const margin = 8
     const right = window.innerWidth - rect.right
 
-    if (isExpanded) {
-      // Keep anchored below trigger (so it never covers the dots button),
-      // and shrink if needed instead of shifting upward onto the trigger.
-      const top = rect.bottom + gap
-      setPos({
-        top,
-        right,
-        maxHeight: Math.max(120, window.innerHeight - top - margin),
-      })
-      return
-    }
-
-    // Same logic as HistoryPicker for collapsed mode: open upward from trigger.
+    // Always open downward (content is top-aligned on Linux)
+    const top = rect.bottom + gap
     setPos({
-      bottom: window.innerHeight - rect.top + gap,
+      top,
       right,
-      maxHeight: undefined,
+      maxHeight: Math.max(120, window.innerHeight - top - margin),
     })
   }, [isExpanded])
 

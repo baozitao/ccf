@@ -109,47 +109,35 @@ export default function App() {
 
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
 
-  // Measure actual UI bounds and send to main for setShape (Linux click-through)
+  // Measure UI height and send to main for dynamic window sizing (Linux)
   useEffect(() => {
     if (!navigator.platform.startsWith('Linux')) return
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    let measuring = false
-    let lastShapeJSON = ''
+    let lastHeight = 0
 
     const measure = () => {
-      if (measuring) return
-      measuring = true
       const els = document.querySelectorAll('[data-clui-ui]')
-      const rects: Array<{x: number; y: number; width: number; height: number}> = []
+      let maxBottom = 0
       els.forEach(el => {
         const r = el.getBoundingClientRect()
-        if (r.width > 0 && r.height > 0) {
-          rects.push({
-            x: Math.max(0, Math.floor(r.x - 6)),
-            y: Math.max(0, Math.floor(r.y - 6)),
-            width: Math.ceil(r.width + 12),
-            height: Math.ceil(r.height + 12),
-          })
+        if (r.width > 0 && r.height > 0 && r.bottom > maxBottom) {
+          maxBottom = r.bottom
         }
       })
-      // Only send if shape actually changed
-      const json = JSON.stringify(rects)
-      if (rects.length > 0 && json !== lastShapeJSON) {
-        lastShapeJSON = json
-        window.clui.resizeHeight(0, rects as any)
+      const h = Math.ceil(maxBottom)
+      if (h > 0 && Math.abs(h - lastHeight) > 5) {
+        lastHeight = h
+        window.clui.resizeHeight(h)
       }
-      measuring = false
     }
 
     const debouncedMeasure = () => {
       if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(measure, 300)
+      debounceTimer = setTimeout(measure, 100)
     }
 
-    // Initial measure
-    setTimeout(measure, 500)
+    setTimeout(measure, 300)
 
-    // Watch for DOM changes (popovers, expand, etc.) — only childList, not attributes
     const mutObs = new MutationObserver(debouncedMeasure)
     mutObs.observe(document.body, { childList: true, subtree: true })
 
@@ -180,37 +168,28 @@ export default function App() {
 
   return (
     <PopoverLayerProvider>
-      <div className="flex flex-col justify-end h-full" style={{ background: 'transparent' }}
+      <div className="flex flex-col h-full" style={{ background: 'transparent' }}
+        onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
-          if (e.button !== 0) return
-          const target = e.target as HTMLElement
-          // Skip interactive elements
-          if (target.closest('button, input, textarea, a, [contenteditable]')) return
-          // If target has cursor explicitly set to text/pointer, don't drag
-          const computedCursor = window.getComputedStyle(target).cursor
-          if (computedCursor === 'text' || computedCursor === 'pointer') return
-          // If clicking directly on a text node inside the conversation scroll area, allow selection
-          if (target.closest('.overflow-y-auto') && document.caretRangeFromPoint?.(e.clientX, e.clientY)?.startContainer?.nodeType === Node.TEXT_NODE) return
-          const startX = e.screenX, startY = e.screenY
-          let lastX = startX, lastY = startY
+          if (e.button !== 2) return
+          e.preventDefault()
+          let lastX = e.screenX, lastY = e.screenY
           let dragging = false
           const onMove = (ev: MouseEvent) => {
-            if (!dragging) {
-              if (Math.abs(ev.screenX - startX) > 5 || Math.abs(ev.screenY - startY) > 5) {
-                dragging = true
-              } else return
-            }
             const dx = ev.screenX - lastX, dy = ev.screenY - lastY
             lastX = ev.screenX; lastY = ev.screenY
-            if (dx !== 0 || dy !== 0) window.clui.dragWindow(dx, dy)
+            if (dx !== 0 || dy !== 0) {
+              dragging = true
+              window.clui.dragWindow(dx, dy)
+            }
           }
           const onUp = () => {
             document.removeEventListener('mousemove', onMove)
             document.removeEventListener('mouseup', onUp)
-            if (dragging) {
-              // Swallow the click that follows mouseup after a drag
-              const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault() }
-              document.addEventListener('click', swallow, { capture: true, once: true })
+            // Restore shape after drag
+            window.clui.dragWindow(0, 0)
+              // Notify drag ended so main process can restore setShape
+              window.clui.dragWindow(0, 0)
             }
           }
           document.addEventListener('mousemove', onMove)
@@ -219,7 +198,7 @@ export default function App() {
       >
 
         {/* ─── 460px content column, centered. Circles overflow left. ─── */}
-        <div style={{ width: contentWidth, position: 'relative', marginLeft: 'auto', marginRight: 20, transition: 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)' }}>
+        <div style={{ width: Math.min(contentWidth, window.innerWidth - 190), position: 'relative', marginLeft: 'auto', marginRight: 0, transition: 'width 0.26s cubic-bezier(0.4, 0, 0.1, 1)' }}>
 
           <AnimatePresence initial={false}>
             {marketplaceOpen && (

@@ -51,19 +51,13 @@ export function HistoryPicker() {
   const updatePos = useCallback(() => {
     if (!triggerRef.current) return
     const rect = triggerRef.current.getBoundingClientRect()
-    if (isExpanded) {
-      const top = rect.bottom + 6
-      setPos({
-        top,
-        right: window.innerWidth - rect.right,
-        maxHeight: window.innerHeight - top - 12,
-      })
-    } else {
-      setPos({
-        bottom: window.innerHeight - rect.top + 6,
-        right: window.innerWidth - rect.right,
-      })
-    }
+    // Always open downward (content is top-aligned on Linux)
+    const top = rect.bottom + 6
+    setPos({
+      top,
+      right: window.innerWidth - rect.right,
+      maxHeight: window.innerHeight - top - 12,
+    })
   }, [isExpanded])
 
   const loadSessions = useCallback(async () => {
@@ -91,6 +85,7 @@ export function HistoryPicker() {
 
   const handleToggle = () => {
     if (!open) {
+      window.clui.resizeHeight(400)
       updatePos()
       void loadSessions()
     }

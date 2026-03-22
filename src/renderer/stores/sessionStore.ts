@@ -50,6 +50,7 @@ interface State {
   createTab: () => Promise<string>
   selectTab: (tabId: string) => void
   closeTab: (tabId: string) => void
+  reorderTabs: (fromIndex: number, toIndex: number) => void
   clearTab: () => void
   toggleExpanded: () => void
   toggleMarketplace: () => void
@@ -207,10 +208,12 @@ export const useSessionStore = create<State>((set, get) => ({
   toggleExpanded: () => {
     const { activeTabId, isExpanded } = get()
     const willExpand = !isExpanded
+    if (willExpand) {
+      window.clui.resizeHeight(600)
+    }
     set((s) => ({
       isExpanded: willExpand,
       marketplaceOpen: false,
-      // Expanding = reading: clear unread flag for the active tab
       tabs: willExpand
         ? s.tabs.map((t) => t.id === activeTabId ? { ...t, hasUnread: false } : t)
         : s.tabs,
@@ -308,6 +311,15 @@ export const useSessionStore = create<State>((set, get) => ({
     setTimeout(() => {
       get().sendMessage('Help me create a new Claude Code skill')
     }, 100)
+  },
+
+  reorderTabs: (fromIndex, toIndex) => {
+    set((s) => {
+      const tabs = [...s.tabs]
+      const [moved] = tabs.splice(fromIndex, 1)
+      tabs.splice(toIndex, 0, moved)
+      return { tabs }
+    })
   },
 
   closeTab: (tabId) => {

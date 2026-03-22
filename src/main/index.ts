@@ -30,9 +30,9 @@ const controlPlane = new ControlPlane(INTERACTIVE_PTY)
 
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
-const BAR_WIDTH = 920
-const PILL_HEIGHT = 720  // Fixed native window height — extra room for expanded UI + shadow buffers
-const PILL_BOTTOM_MARGIN = 24
+const BAR_WIDTH = 650  // Tight: 180(circles) + 460(content) + 10(pad) = 650; setShape handles click-through
+const PILL_HEIGHT = 200  // Collapsed height; grows on expand. Content top-aligned.
+const PILL_BOTTOM_MARGIN = 4
 
 // ─── Broadcast to renderer ───
 
@@ -206,16 +206,17 @@ function toggleWindow(source = 'unknown'): void {
 }
 
 // ─── Resize ───
-// Fixed-height mode: ignore renderer resize events to prevent jank.
-// The native window stays at PILL_HEIGHT; all expand/collapse happens inside the renderer.
-
-ipcMain.on(IPC.RESIZE_HEIGHT, (_e, _height: number, rects?: Array<{x: number; y: number; width: number; height: number}>) => {
+// Dynamic height for Linux (no setShape — it conflicts with dragging on X11)
+ipcMain.on(IPC.RESIZE_HEIGHT, (_e, height: number) => {
   if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'linux') return
-  if (rects && rects.length > 0) {
-    try {
-      mainWindow.setShape(rects)
-    } catch (err: any) {
-      log(`setShape error: ${err.message}`)
+  if (isDraggingWindow) return
+
+  if (height > 0) {
+    const newH = Math.max(180, Math.min(height + 20, 700))
+    const [x, y] = mainWindow.getPosition()
+    const [, oldH] = mainWindow.getSize()
+    if (Math.abs(newH - oldH) > 5) {
+      mainWindow.setBounds({ x, y, width: BAR_WIDTH, height: newH })
     }
   }
 })
@@ -228,14 +229,29 @@ ipcMain.handle(IPC.ANIMATE_HEIGHT, () => {
   // No-op — kept for API compat, animation handled purely in renderer
 })
 
+ipcMain.on('clui:clear-shape', () => {
+  if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'linux') return
+  const [w, h] = mainWindow.getSize()
+  try { mainWindow.setShape([{ x: 0, y: 0, width: w, height: h }]) } catch {}
+})
+
 ipcMain.on(IPC.HIDE_WINDOW, () => {
   if (mainWindow) {
     mainWindow.hide()
   }
 })
 
+let isDraggingWindow = false
 ipcMain.on('clui:drag-window', (_e, dx: number, dy: number) => {
   if (!mainWindow) return
+  if (dx === 0 && dy === 0) {
+    // Drag ended
+    isDraggingWindow = false
+    return
+  }
+  if (!isDraggingWindow) {
+    isDraggingWindow = true
+  }
   const [x, y] = mainWindow.getPosition()
   mainWindow.setPosition(x + dx, y + dy)
 })
@@ -1066,6 +1082,9 @@ app.whenReady().then(async () => {
       toggleWindow('http-toggle')
       res.writeHead(200)
       res.end('toggled')
+    })
+    toggleServer.on('error', (err: any) => {
+      log(`Toggle server error: ${err.message} — F3 toggle may not work`)
     })
     toggleServer.listen(19850, '127.0.0.1', () => {
       log('Toggle HTTP server listening on 127.0.0.1:19850')

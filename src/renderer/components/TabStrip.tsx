@@ -42,6 +42,8 @@ export function TabStrip() {
   const selectTab = useSessionStore((s) => s.selectTab)
   const createTab = useSessionStore((s) => s.createTab)
   const closeTab = useSessionStore((s) => s.closeTab)
+  const reorderTabs = useSessionStore((s) => s.reorderTabs)
+  const [dragTabId, setDragTabId] = useState<string | null>(null)
   const colors = useColors()
   const [editingTabId, setEditingTabId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -124,9 +126,27 @@ export function TabStrip() {
                   key={tab.id}
                   layout
                   initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: dragTabId ? 0.5 : 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation()
+                    setDragTabId(tab.id)
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
+                  onDrop={(e) => {
+                    e.stopPropagation()
+                    if (!dragTabId || dragTabId === tab.id) return
+                    const fromIdx = tabs.findIndex(t => t.id === dragTabId)
+                    const toIdx = tabs.findIndex(t => t.id === tab.id)
+                    if (fromIdx >= 0 && toIdx >= 0) reorderTabs(fromIdx, toIdx)
+                    setDragTabId(null)
+                  }}
+                  onDragEnd={() => setDragTabId(null)}
                   onClick={() => handleClick(tab.id)}
                   onDoubleClick={(e) => handleDoubleClick(e, tab.id, tab.title)}
                   className="group flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0 max-w-[160px] transition-all duration-150"
