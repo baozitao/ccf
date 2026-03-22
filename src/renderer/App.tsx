@@ -109,43 +109,6 @@ export default function App() {
 
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
 
-  // Measure UI height and send to main for dynamic window sizing (Linux)
-  useEffect(() => {
-    if (!navigator.platform.startsWith('Linux')) return
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    let lastHeight = 0
-
-    const measure = () => {
-      const els = document.querySelectorAll('[data-clui-ui]')
-      let maxBottom = 0
-      els.forEach(el => {
-        const r = el.getBoundingClientRect()
-        if (r.width > 0 && r.height > 0 && r.bottom > maxBottom) {
-          maxBottom = r.bottom
-        }
-      })
-      const h = Math.ceil(maxBottom)
-      if (h > 0 && Math.abs(h - lastHeight) > 5) {
-        lastHeight = h
-        window.clui.resizeHeight(h)
-      }
-    }
-
-    const debouncedMeasure = () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(measure, 100)
-    }
-
-    setTimeout(measure, 300)
-
-    const mutObs = new MutationObserver(debouncedMeasure)
-    mutObs.observe(document.body, { childList: true, subtree: true })
-
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      mutObs.disconnect()
-    }
-  }, [])
 
   // Layout dimensions — expandedUI widens and heightens the panel
   const contentWidth = expandedUI ? 700 : spacing.contentWidth

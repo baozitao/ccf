@@ -31,7 +31,7 @@ const controlPlane = new ControlPlane(INTERACTIVE_PTY)
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
 const BAR_WIDTH = 650  // Tight: 180(circles) + 460(content) + 10(pad) = 650; setShape handles click-through
-const PILL_HEIGHT = 200  // Collapsed height; grows on expand. Content top-aligned.
+const PILL_HEIGHT = 180  // Starts compact; resizeHeight grows/shrinks synchronously.
 const PILL_BOTTOM_MARGIN = 4
 
 // ─── Broadcast to renderer ───
@@ -206,18 +206,14 @@ function toggleWindow(source = 'unknown'): void {
 }
 
 // ─── Resize ───
-// Dynamic height for Linux (no setShape — it conflicts with dragging on X11)
-ipcMain.on(IPC.RESIZE_HEIGHT, (_e, height: number) => {
+ipcMain.handle(IPC.RESIZE_HEIGHT, (_e, height: number) => {
   if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'linux') return
-  if (isDraggingWindow) return
-
-  if (height > 0) {
-    const newH = Math.max(180, Math.min(height + 20, 700))
-    const [x, y] = mainWindow.getPosition()
-    const [, oldH] = mainWindow.getSize()
-    if (Math.abs(newH - oldH) > 5) {
-      mainWindow.setBounds({ x, y, width: BAR_WIDTH, height: newH })
-    }
+  if (isDraggingWindow || !height || height <= 0) return
+  const newH = Math.max(150, Math.min(height + 30, 800))
+  const [x, y] = mainWindow.getPosition()
+  const [, oldH] = mainWindow.getSize()
+  if (Math.abs(newH - oldH) > 5) {
+    mainWindow.setBounds({ x, y, width: BAR_WIDTH, height: newH })
   }
 })
 

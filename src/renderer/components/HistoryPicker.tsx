@@ -83,11 +83,13 @@ export function HistoryPicker() {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const handleToggle = () => {
+  const handleToggle = async () => {
     if (!open) {
-      window.clui.resizeHeight(400)
+      await window.clui.resizeHeight(400)  // grow for popup
       updatePos()
       void loadSessions()
+    } else {
+      void window.clui.resizeHeight(150)  // shrink after close
     }
     setOpen((o) => !o)
   }

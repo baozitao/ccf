@@ -37,7 +37,7 @@ export interface CluiAPI {
   onThemeChange(callback: (isDark: boolean) => void): () => void
 
   // ─── Window management ───
-  resizeHeight(height: number, rects?: any): void
+  resizeHeight(height: number): Promise<void>
   setWindowWidth(width: number): void
   animateHeight(from: number, to: number, durationMs: number): Promise<void>
   hideWindow(): void
@@ -99,7 +99,7 @@ const api: CluiAPI = {
   },
 
   // ─── Window management ───
-  resizeHeight: (height, rects) => ipcRenderer.send(IPC.RESIZE_HEIGHT, height, rects),
+  resizeHeight: (height) => ipcRenderer.invoke(IPC.RESIZE_HEIGHT, height),
   animateHeight: (from, to, durationMs) =>
     ipcRenderer.invoke(IPC.ANIMATE_HEIGHT, { from, to, durationMs }),
   hideWindow: () => ipcRenderer.send(IPC.HIDE_WINDOW),

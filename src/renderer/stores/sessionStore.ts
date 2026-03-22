@@ -205,11 +205,11 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
   },
 
-  toggleExpanded: () => {
+  toggleExpanded: async () => {
     const { activeTabId, isExpanded } = get()
     const willExpand = !isExpanded
     if (willExpand) {
-      window.clui.resizeHeight(600)
+      await window.clui.resizeHeight(600)  // wait for window to grow
     }
     set((s) => ({
       isExpanded: willExpand,
@@ -218,6 +218,9 @@ export const useSessionStore = create<State>((set, get) => ({
         ? s.tabs.map((t) => t.id === activeTabId ? { ...t, hasUnread: false } : t)
         : s.tabs,
     }))
+    if (!willExpand) {
+      await window.clui.resizeHeight(150)  // shrink after collapse
+    }
   },
 
   toggleMarketplace: () => {
@@ -378,9 +381,7 @@ export const useSessionStore = create<State>((set, get) => ({
         hasChosenDirectory: !!projectPath,
         messages,
       }
-      window.clui.resizeHeight(600)
-      // Wait for window to resize before expanding content
-      await new Promise(r => setTimeout(r, 100))
+      await window.clui.resizeHeight(600)  // grow window first
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
@@ -394,7 +395,6 @@ export const useSessionStore = create<State>((set, get) => ({
       tab.title = title || 'Resumed Session'
       tab.workingDirectory = defaultDir
       tab.hasChosenDirectory = !!projectPath
-      window.clui.resizeHeight(600)
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
