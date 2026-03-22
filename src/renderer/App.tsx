@@ -186,11 +186,7 @@ export default function App() {
           const onUp = () => {
             document.removeEventListener('mousemove', onMove)
             document.removeEventListener('mouseup', onUp)
-            // Restore shape after drag
             window.clui.dragWindow(0, 0)
-              // Notify drag ended so main process can restore setShape
-              window.clui.dragWindow(0, 0)
-            }
           }
           document.addEventListener('mousemove', onMove)
           document.addEventListener('mouseup', onUp)
