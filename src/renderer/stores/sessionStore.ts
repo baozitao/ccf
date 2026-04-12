@@ -145,6 +145,7 @@ function makeLocalTab(): TabState {
     workingDirectory: '~',
     hasChosenDirectory: false,
     additionalDirs: [],
+    cumulativeTokens: { input: 0, output: 0, cacheRead: 0 },
   }
 }
 
@@ -796,6 +797,12 @@ export const useSessionStore = create<State>((set, get) => ({
               numTurns: event.numTurns,
               usage: event.usage,
               sessionId: event.sessionId,
+            }
+            // Accumulate token usage
+            updated.cumulativeTokens = {
+              input: updated.cumulativeTokens.input + (event.usage.input_tokens || 0),
+              output: updated.cumulativeTokens.output + (event.usage.output_tokens || 0),
+              cacheRead: updated.cumulativeTokens.cacheRead + (event.usage.cache_read_input_tokens || 0),
             }
             // ── Final text fallback ──
             // If neither text_chunks nor task_update text produced an assistant message,

@@ -509,12 +509,58 @@ function TableScrollWrapper({ children }: { children: React.ReactNode }) {
 
 // ─── Image card — graceful fallback when src returns 404 ───
 
+function ImagePreviewOverlay({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  return (
+    <div
+      data-clui-ui
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0, 0, 0, 0.85)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'zoom-out',
+      }}
+    >
+      <motion.img
+        src={src}
+        alt={alt}
+        initial={{ opacity: 0, scale: 0.85 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.85 }}
+        transition={{ duration: 0.15 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: '90vw',
+          maxHeight: '90vh',
+          objectFit: 'contain',
+          borderRadius: 8,
+          cursor: 'default',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        }}
+      />
+    </div>
+  )
+}
+
 function ImageCard({ src, alt, colors }: { src?: string; alt?: string; colors: ReturnType<typeof useColors> }) {
   const [failed, setFailed] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   // Reset failed state when src changes (e.g. during streaming)
   useEffect(() => { setFailed(false) }, [src])
   const label = alt || 'Image'
-  const open = () => { if (src) window.clui.openExternal(String(src)) }
+  const isDataUrl = src?.startsWith('data:')
+  const open = () => {
+    if (!src) return
+    if (isDataUrl) {
+      setShowPreview(true)
+    } else {
+      window.clui.openExternal(String(src))
+    }
+  }
 
   if (failed || !src) {
     return (
@@ -522,7 +568,7 @@ function ImageCard({ src, alt, colors }: { src?: string; alt?: string; colors: R
         type="button"
         className="inline-flex items-center gap-1.5 my-1 px-2.5 py-1.5 rounded-md text-[12px] cursor-pointer"
         style={{ background: colors.surfacePrimary, color: colors.accent, border: `1px solid ${colors.toolBorder}` }}
-        onClick={open}
+        onClick={() => { if (src) window.clui.openExternal(String(src)) }}
         title={src}
       >
         <Globe size={12} />
@@ -532,26 +578,33 @@ function ImageCard({ src, alt, colors }: { src?: string; alt?: string; colors: R
   }
 
   return (
-    <button
-      type="button"
-      className="block my-2 rounded-lg overflow-hidden border text-left cursor-pointer"
-      style={{ borderColor: colors.toolBorder, background: colors.surfacePrimary }}
-      onClick={open}
-      title={src}
-    >
-      <img
-        src={src}
-        alt={label}
-        className="block w-full max-h-[260px] object-cover"
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
-      {alt && (
-        <div className="px-2 py-1 text-[11px]" style={{ color: colors.textTertiary }}>
-          {alt}
-        </div>
-      )}
-    </button>
+    <>
+      <button
+        type="button"
+        className="block my-2 rounded-lg overflow-hidden border text-left"
+        style={{ borderColor: colors.toolBorder, background: colors.surfacePrimary, cursor: 'zoom-in' }}
+        onClick={open}
+        title={isDataUrl ? label : src}
+      >
+        <img
+          src={src}
+          alt={label}
+          className="block w-full max-h-[260px] object-cover"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+        {alt && (
+          <div className="px-2 py-1 text-[11px]" style={{ color: colors.textTertiary }}>
+            {alt}
+          </div>
+        )}
+      </button>
+      <AnimatePresence>
+        {showPreview && (
+          <ImagePreviewOverlay src={src} alt={label} onClose={() => setShowPreview(false)} />
+        )}
+      </AnimatePresence>
+    </>
   )
 }
 

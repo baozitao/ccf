@@ -186,15 +186,16 @@ function createWindow(): void {
     if (process.platform === 'darwin') {
       mainWindow?.setIgnoreMouseEvents(true, { forward: true })
     }
-    // Linux: set override-redirect to bypass GNOME/Mutter position constraints entirely
+    // Linux: set override-redirect immediately for drag freedom
     if (process.platform === 'linux' && mainWindow) {
-      try {
-        const wid = String(mainWindow.getNativeWindowHandle().readUInt32LE(0))
-        execFile('xdotool', ['set_window', '--overrideredirect', '1', wid], (err) => {
-          if (err) log(`xdotool override-redirect failed: ${err.message}`)
-          else log(`override-redirect set for wid ${wid}`)
-        })
-      } catch (e: any) { log(`xdotool wid failed: ${e.message}`) }
+      linuxWid = String(mainWindow.getNativeWindowHandle().readUInt32LE(0))
+      execFile('xdotool', ['set_window', '--overrideredirect', '1', linuxWid], (err) => {
+        if (err) log(`xdotool override-redirect failed: ${err.message}`)
+        else {
+          log(`override-redirect set for wid ${linuxWid}`)
+          raiseAndFocusLinux()
+        }
+      })
     }
   })
 
@@ -235,6 +236,12 @@ function showWindow(source = 'unknown'): void {
   }
   mainWindow.show()
   mainWindow.webContents.focus()
+  // Re-assert override-redirect + raise/focus on every show (Linux)
+  if (process.platform === 'linux' && linuxWid) {
+    execFile('xdotool', ['set_window', '--overrideredirect', '1', linuxWid], () => {
+      raiseAndFocusLinux()
+    })
+  }
   broadcast(IPC.WINDOW_SHOWN)
   if (SPACES_DEBUG) scheduleToggleSnapshots(toggleId, 'show')
 }
@@ -303,12 +310,22 @@ let dragInterval: ReturnType<typeof setInterval> | null = null
 let dragLastCursor = { x: 0, y: 0 }
 let dragTimeout: ReturnType<typeof setTimeout> | null = null
 let dragIdleCount = 0
+let linuxWid = ''
+
+function raiseAndFocusLinux(): void {
+  if (process.platform !== 'linux' || !linuxWid) return
+  execFile('xdotool', ['windowraise', linuxWid], () => {
+    execFile('xdotool', ['windowfocus', linuxWid], () => {})
+  })
+}
 
 function stopDrag(): void {
   isDraggingWindow = false
   if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
   if (dragTimeout) { clearTimeout(dragTimeout); dragTimeout = null }
   dragIdleCount = 0
+  // After drag ends, re-raise and re-focus the window
+  raiseAndFocusLinux()
 }
 
 // Main-process cursor polling drag — immune to renderer losing mouse events
@@ -343,6 +360,75 @@ ipcMain.on('clui:drag-start', () => {
 
 ipcMain.on('clui:drag-end', () => {
   stopDrag()
+})
+
+// Linux: grab focus on left-click (override-redirect windows don't auto-focus)
+ipcMain.on('clui:grab-focus', () => {
+  raiseAndFocusLinux()
+})
+
+// Image preview in a separate window positioned to the left of CCF
+let previewWindow: BrowserWindow | null = null
+ipcMain.on('clui:preview-image', (_e, dataUrl: string) => {
+  if (!mainWindow) return
+
+  // Close existing preview
+  if (previewWindow && !previewWindow.isDestroyed()) {
+    previewWindow.close()
+    previewWindow = null
+    return
+  }
+
+  const [mx, my] = mainWindow.getPosition()
+  const [, mh] = mainWindow.getSize()
+  const previewW = 600
+  const previewH = 500
+
+  previewWindow = new BrowserWindow({
+    width: previewW,
+    height: previewH,
+    x: mx - previewW - 10,
+    y: my + mh - previewH,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: true,
+    webPreferences: { sandbox: true, contextIsolation: true },
+  })
+
+  // Set override-redirect on Linux for free positioning
+  if (process.platform === 'linux') {
+    previewWindow.once('ready-to-show', () => {
+      if (!previewWindow) return
+      try {
+        const wid = String(previewWindow.getNativeWindowHandle().readUInt32LE(0))
+        execFile('xdotool', ['set_window', '--overrideredirect', '1', wid], () => {})
+      } catch {}
+    })
+  }
+
+  const html = `<!DOCTYPE html>
+<html><head><style>
+  body { margin:0; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; height:100vh; cursor:pointer; overflow:hidden; }
+  img { max-width:95%; max-height:95%; object-fit:contain; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.5); transition:transform 0.1s; }
+</style></head><body>
+  <img id="img" src="${dataUrl.replace(/"/g, '&quot;')}" />
+  <script>
+    let scale = 1;
+    const img = document.getElementById('img');
+    document.addEventListener('wheel', (e) => { e.preventDefault(); scale = Math.max(0.2, Math.min(5, scale + (e.deltaY > 0 ? -0.15 : 0.15))); img.style.transform = 'scale('+scale+')'; }, { passive: false });
+    document.addEventListener('click', (e) => { if (e.target === img && scale > 1) return; window.close(); });
+  </script>
+</body></html>`
+
+  previewWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+  previewWindow.show()
+  previewWindow.on('closed', () => { previewWindow = null })
+  previewWindow.on('blur', () => {
+    if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close()
+  })
 })
 
 ipcMain.handle(IPC.IS_VISIBLE, () => {

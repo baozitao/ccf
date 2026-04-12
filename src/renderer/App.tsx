@@ -174,6 +174,7 @@ export default function App() {
   return (
     <PopoverLayerProvider>
       <div className="flex flex-col h-full" style={{ background: 'transparent' }}
+        onMouseDown={() => { window.clui?.grabFocus?.() }}
         onPointerDown={(e) => {
           if (e.button !== 2) return
           e.preventDefault()

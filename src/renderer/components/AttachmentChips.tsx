@@ -17,6 +17,11 @@ const FILE_ICONS: Record<string, React.ReactNode> = {
   'text/toml': <FileCode size={14} />,
 }
 
+// Open image preview in a separate window via main process
+function openImagePreview(dataUrl: string): void {
+  window.clui?.previewImage?.(dataUrl)
+}
+
 export function AttachmentChips({
   attachments,
   onRemove,
@@ -48,13 +53,17 @@ export function AttachmentChips({
               maxWidth: 200,
             }}
           >
-            {/* Image preview thumbnail */}
+            {/* Image preview thumbnail — click to open in system viewer */}
             {a.dataUrl ? (
               <img
                 src={a.dataUrl}
                 alt={a.name}
                 className="rounded-[10px] object-cover flex-shrink-0"
-                style={{ width: 24, height: 24 }}
+                style={{ width: 24, height: 24, cursor: 'zoom-in' }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openImagePreview(a.dataUrl!)
+                }}
               />
             ) : (
               <span className="flex-shrink-0" style={{ color: colors.textTertiary }}>
@@ -65,7 +74,13 @@ export function AttachmentChips({
             {/* File name */}
             <span
               className="text-[11px] font-medium truncate min-w-0 flex-1"
-              style={{ color: colors.textPrimary }}
+              style={{ color: colors.textPrimary, cursor: a.dataUrl ? 'zoom-in' : 'default' }}
+              onClick={(e) => {
+                if (a.dataUrl) {
+                  e.stopPropagation()
+                  openImagePreview(a.dataUrl)
+                }
+              }}
             >
               {a.name}
             </span>

@@ -170,6 +170,8 @@ export interface TabState {
   hasChosenDirectory: boolean
   /** Extra directories accessible via --add-dir (session-preserving) */
   additionalDirs: string[]
+  /** Cumulative token usage across all turns in this tab */
+  cumulativeTokens: { input: number; output: number; cacheRead: number }
 }
 
 export interface Message {

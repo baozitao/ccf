@@ -44,7 +44,9 @@ export interface CluiAPI {
   dragWindow(dx: number, dy: number): void
   dragStart(): void
   dragEnd(): void
+  grabFocus(): void
   clearShape(): void
+  previewImage(dataUrl: string): void
   isVisible(): Promise<boolean>
   /** OS-level click-through for transparent window regions */
   setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): void
@@ -106,7 +108,9 @@ const api: CluiAPI = {
   dragWindow: (dx, dy) => ipcRenderer.send('clui:drag-window', dx, dy),
   dragStart: () => ipcRenderer.send('clui:drag-start'),
   dragEnd: () => ipcRenderer.send('clui:drag-end'),
+  grabFocus: () => ipcRenderer.send('clui:grab-focus'),
   clearShape: () => ipcRenderer.send('clui:clear-shape'),
+  previewImage: (dataUrl: string) => ipcRenderer.send('clui:preview-image', dataUrl),
   isVisible: () => ipcRenderer.invoke(IPC.IS_VISIBLE),
   setIgnoreMouseEvents: (ignore, options) =>
     ipcRenderer.send(IPC.SET_IGNORE_MOUSE_EVENTS, ignore, options || {}),

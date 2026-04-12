@@ -265,8 +265,13 @@ export function StatusBar() {
       && a.hasChosenDirectory === b.hasChosenDirectory
       && a.workingDirectory === b.workingDirectory
       && a.claudeSessionId === b.claudeSessionId
+      && a.lastResult === b.lastResult
+      && a.sessionVersion === b.sessionVersion
+      && a.sessionModel === b.sessionModel
+      && a.cumulativeTokens === b.cumulativeTokens
     ),
   )
+  const staticInfo = useSessionStore((s) => s.staticInfo)
   const addDirectory = useSessionStore((s) => s.addDirectory)
   const removeDirectory = useSessionStore((s) => s.removeDirectory)
   const popoverLayer = usePopoverLayer()
@@ -433,6 +438,41 @@ export function StatusBar() {
         <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
 
         <PermissionModePicker />
+
+        {staticInfo?.version && (
+          <>
+            <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+            <span className="text-[10px]" style={{ color: colors.textTertiary }}>v{staticInfo.version}</span>
+          </>
+        )}
+
+        {tab.cumulativeTokens.input > 0 && (() => {
+          const model = tab.sessionModel || ''
+          const ctxSize = model.includes('1m') ? 1000000 : 200000
+          const totalTok = tab.cumulativeTokens.input + tab.cumulativeTokens.output
+          const pct = Math.min(100, Math.round((totalTok / ctxSize) * 100))
+          const pctColor = pct > 80 ? colors.statusError : pct > 50 ? '#c4a260' : colors.textTertiary
+          return (
+            <>
+              <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+              <span className="text-[10px]" style={{ color: pctColor }} title={`${totalTok.toLocaleString()} / ${ctxSize.toLocaleString()} tokens`}>
+                ctx {pct}%
+              </span>
+              <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+              <span className="text-[10px]" style={{ color: colors.textTertiary }}>
+                {tab.cumulativeTokens.input.toLocaleString()} in / {tab.cumulativeTokens.output.toLocaleString()} out
+              </span>
+              {tab.lastResult && (
+                <>
+                  <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+                  <span className="text-[10px]" style={{ color: colors.textTertiary }}>
+                    ${tab.lastResult.totalCostUsd.toFixed(4)}
+                  </span>
+                </>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* Right — Open in CLI */}

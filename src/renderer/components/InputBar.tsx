@@ -524,6 +524,7 @@ export function InputBar() {
           {voiceError}
         </div>
       )}
+
     </div>
   )
 }
