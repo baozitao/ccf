@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, session } from 'electron'
 import { join } from 'path'
+import { execFile } from 'child_process'
 import { existsSync, readdirSync, statSync, createReadStream } from 'fs'
 import { createInterface } from 'readline'
 import { homedir } from 'os'
@@ -145,9 +146,7 @@ function createWindow(): void {
     height: PILL_HEIGHT,
     x,
     y,
-    // macOS: NSPanel (non-activating, joins all spaces)
-    // Linux: 'dock' bypasses GNOME window constraints so the overlay can be placed anywhere
-    type: (process.platform === 'darwin' ? 'panel' : 'dock') as any,
+    ...(process.platform === 'darwin' ? { type: 'panel' as const } : {}),  // NSPanel — non-activating, joins all spaces
     frame: false,
     transparent: true,
     resizable: false,
@@ -187,9 +186,16 @@ function createWindow(): void {
     if (process.platform === 'darwin') {
       mainWindow?.setIgnoreMouseEvents(true, { forward: true })
     }
-    // if (process.env.ELECTRON_RENDERER_URL) {
-    //   mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    // }
+    // Linux: set override-redirect to bypass GNOME/Mutter position constraints entirely
+    if (process.platform === 'linux' && mainWindow) {
+      try {
+        const wid = String(mainWindow.getNativeWindowHandle().readUInt32LE(0))
+        execFile('xdotool', ['set_window', '--overrideredirect', '1', wid], (err) => {
+          if (err) log(`xdotool override-redirect failed: ${err.message}`)
+          else log(`override-redirect set for wid ${wid}`)
+        })
+      } catch (e: any) { log(`xdotool wid failed: ${e.message}`) }
+    }
   })
 
   let forceQuit = false
