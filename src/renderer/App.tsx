@@ -174,20 +174,21 @@ export default function App() {
   return (
     <PopoverLayerProvider>
       <div className="flex flex-col h-full" style={{ background: 'transparent' }}
-        onContextMenu={(e) => e.preventDefault()}
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
           if (e.button !== 2) return
           e.preventDefault()
-          // Tell main process to start polling cursor position — no renderer events needed
+          // Capture pointer so pointerup fires even when cursor leaves the window
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+          // Tell main process to start polling cursor position
           window.clui.dragStart()
-          const onUp = () => {
-            document.removeEventListener('mouseup', onUp)
-            window.removeEventListener('blur', onUp)
+          const onUp = (ev: PointerEvent) => {
+            ;(ev.target as HTMLElement).releasePointerCapture?.(ev.pointerId)
+            document.removeEventListener('pointerup', onUp)
             window.clui.dragEnd()
           }
-          document.addEventListener('mouseup', onUp)
-          window.addEventListener('blur', onUp)  // stop if window loses focus
+          document.addEventListener('pointerup', onUp)
         }}
+        onContextMenu={(e) => e.preventDefault()}
       >
 
         {/* Marketplace panel — outside content div so it's not constrained by contentWidth */}

@@ -145,7 +145,9 @@ function createWindow(): void {
     height: PILL_HEIGHT,
     x,
     y,
-    ...(process.platform === 'darwin' ? { type: 'panel' as const } : {}),  // NSPanel — non-activating, joins all spaces
+    // macOS: NSPanel (non-activating, joins all spaces)
+    // Linux: 'dock' bypasses GNOME window constraints so the overlay can be placed anywhere
+    type: (process.platform === 'darwin' ? 'panel' : 'dock') as any,
     frame: false,
     transparent: true,
     resizable: false,
@@ -185,9 +187,9 @@ function createWindow(): void {
     if (process.platform === 'darwin') {
       mainWindow?.setIgnoreMouseEvents(true, { forward: true })
     }
-    if (process.env.ELECTRON_RENDERER_URL) {
-      mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    }
+    // if (process.env.ELECTRON_RENDERER_URL) {
+    //   mainWindow?.webContents.openDevTools({ mode: 'detach' })
+    // }
   })
 
   let forceQuit = false
@@ -293,16 +295,26 @@ ipcMain.on(IPC.HIDE_WINDOW, () => {
 let isDraggingWindow = false
 let dragInterval: ReturnType<typeof setInterval> | null = null
 let dragLastCursor = { x: 0, y: 0 }
+let dragTimeout: ReturnType<typeof setTimeout> | null = null
+let dragIdleCount = 0
+
+function stopDrag(): void {
+  isDraggingWindow = false
+  if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
+  if (dragTimeout) { clearTimeout(dragTimeout); dragTimeout = null }
+  dragIdleCount = 0
+}
 
 // Main-process cursor polling drag — immune to renderer losing mouse events
 ipcMain.on('clui:drag-start', () => {
   if (!mainWindow || isDraggingWindow) return
   isDraggingWindow = true
+  dragIdleCount = 0
   const cur = screen.getCursorScreenPoint()
   dragLastCursor = { x: cur.x, y: cur.y }
   dragInterval = setInterval(() => {
     if (!mainWindow || mainWindow.isDestroyed()) {
-      if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
+      stopDrag()
       return
     }
     const cur = screen.getCursorScreenPoint()
@@ -310,15 +322,21 @@ ipcMain.on('clui:drag-start', () => {
     const dy = cur.y - dragLastCursor.y
     dragLastCursor = { x: cur.x, y: cur.y }
     if (dx !== 0 || dy !== 0) {
+      dragIdleCount = 0
       const [wx, wy] = mainWindow.getPosition()
       mainWindow.setPosition(wx + dx, wy + dy)
+    } else {
+      // Safety: if cursor hasn't moved for ~2s, assume mouseup was lost
+      dragIdleCount++
+      if (dragIdleCount > 120) { stopDrag() }
     }
   }, 16)
+  // Hard safety timeout: 30s max drag
+  dragTimeout = setTimeout(() => stopDrag(), 30000)
 })
 
 ipcMain.on('clui:drag-end', () => {
-  isDraggingWindow = false
-  if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
+  stopDrag()
 })
 
 ipcMain.handle(IPC.IS_VISIBLE, () => {
@@ -1228,13 +1246,12 @@ app.whenReady().then(async () => {
     })
   }
 
-  // macOS: register globalShortcut; Linux: use GNOME keybinding + HTTP toggle instead
-  if (process.platform === 'darwin') {
-    const registered = globalShortcut.register('Ctrl+Space', () => toggleWindow('shortcut Ctrl+Space'))
-    if (!registered) log('Ctrl+Space shortcut registration failed')
-    globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
-  } else {
-    log('Linux: F3 toggle via GNOME keybinding → HTTP 19850')
+  // Register global shortcuts on all platforms
+  const registered = globalShortcut.register('Ctrl+Space', () => toggleWindow('shortcut Ctrl+Space'))
+  if (!registered) log('Ctrl+Space shortcut registration failed')
+  globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
+  if (process.platform === 'linux') {
+    log('Linux: Ctrl+Space registered + F3 toggle via GNOME keybinding → HTTP 19850')
   }
 
   const trayIconPath = join(__dirname, process.platform === 'darwin'
